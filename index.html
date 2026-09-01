@@ -608,6 +608,7 @@ const ETAPA_FALLBACK = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085
 let accessToken = null, tokenClient = null;
 let podeEditar = false;          // a conta que entrou tem permissao de escrita na planilha?
 let tokenAcessos = null;         // token com escopo extra do Drive (so para gerenciar acessos)
+let avisouLeitura = false;       // ja avisou que a conta e somente leitura?
 const DB = {};                 // DB.producao, DB.tanques, ... (arrays de objetos)
 let LOTES = [];                // lotes com cronograma calculado
 let ETAPA_ORDEM = [];          // [{etapa, ordem, ocupa, dur, unid, cor}]
@@ -724,8 +725,12 @@ function tabelaDeValores(values){
   }).filter(o => headers.some(h => o[h] !== ''));
 }
 
-/** Descobre se a conta que entrou pode escrever: um batchUpdate sem nenhuma
-    requisicao nao altera nada e devolve 403 para quem so tem leitura. */
+/** Descobre se a conta que entrou pode escrever na planilha.
+    Um batchUpdate sem nenhuma requisição não altera nada; o Google recusa
+    com 401/403 quem só tem leitura. Qualquer outra resposta conta como
+    "pode editar" — é o Sheets que valida a escrita de verdade depois, e é
+    melhor mostrar o botão e a pessoa ver um erro claro do que esconder o
+    botão de quem tem permissão. */
 async function verificarPermissaoEdicao(){
   try {
     const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
@@ -733,8 +738,10 @@ async function verificarPermissaoEdicao(){
       headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
       body: JSON.stringify({ requests: [] }),
     });
-    podeEditar = r.ok;
-  } catch(e){ podeEditar = false; }
+    podeEditar = (r.status !== 401 && r.status !== 403);
+  } catch(e){
+    podeEditar = true;      // rede instável não deve travar quem pode editar
+  }
 }
 
 /* ------------------------- ESCRITA (Sheets API v4) ------------------------- */
@@ -2194,10 +2201,15 @@ async function refresh(){
     gateMsg('');
     document.getElementById('sourceLabel').textContent =
       `${(DB.producao||[]).length} lotes · ${(DB.lancamentos||[]).length} lançamentos · `
-      + `${podeEditar ? 'edição liberada' : 'somente leitura'} · `
+      + `${podeEditar ? 'edição liberada' : 'somente leitura nesta conta'} · `
       + `atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
     document.getElementById('statusDot').className = 'dot';
     document.getElementById('statusText').textContent = 'conectado';
+    if (!podeEditar && !avisouLeitura){
+      avisouLeitura = true;
+      toast('Esta conta abre o painel, mas não tem permissão para editar a planilha. '
+          + 'Peça acesso de Editor a quem administra.', false);
+    }
   } catch (e){
     console.error(e);
     document.getElementById('statusDot').className = 'dot err';
