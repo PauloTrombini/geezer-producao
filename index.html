@@ -234,6 +234,49 @@
   .field-row.wide{ grid-column:1 / -1; }
   .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
 
+  /* ---------- Tela de bloqueio (login obrigatorio) ---------- */
+  body.locked > header .right-controls > *:not(#authBtn),
+  body.locked > nav, body.locked > main{ display:none !important; }
+  .gate{
+    display:none; position:fixed; inset:0; z-index:70; padding:24px;
+    align-items:center; justify-content:center; background:var(--bg);
+  }
+  body.locked .gate{ display:flex; }
+  .gate-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:34px 32px; max-width:440px; width:100%; text-align:center;
+  }
+  .gate-card .brand-mark{ margin:0 auto 16px; width:52px; height:52px; font-size:26px; }
+  .gate-card h1{ margin:0 0 8px; font-size:20px; letter-spacing:-.01em; }
+  .gate-card p{ color:var(--txt2); font-size:13.5px; margin:0 0 22px; line-height:1.55; }
+  .gate-card .btn{ padding:11px 22px; font-size:14px; }
+  .gate-msg{ margin-top:18px; font-size:13px; color:var(--txt2); line-height:1.55; }
+  .gate-msg.err{ color:var(--red); }
+
+  /* ---------- Gerenciar acessos ---------- */
+  .acesso-item{
+    display:flex; align-items:center; gap:10px; padding:10px 2px;
+    border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .acesso-item:last-child{ border-bottom:none; }
+  .acesso-mail{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .acesso-mail small{ display:block; color:var(--txt3); font-size:11px; }
+  .add-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+  .add-row .grow{ flex:1 1 210px; }
+  .check{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--txt2); margin-top:12px; }
+  .sep{ border:none; border-top:1px solid var(--border); margin:18px 0 14px; }
+
+  /* ---------- Ficha de composição ---------- */
+  .modal.wide{ max-width:860px; }
+  .comp-head{ display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr)); gap:10px; margin-bottom:18px; }
+  .comp-kpi{ background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .comp-kpi .label{ color:var(--txt2); font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+  .comp-kpi .value{ font-size:16px; font-weight:650; margin-top:3px; }
+  .grupo-lbl td{ background:var(--panel2); color:var(--txt2); font-size:10.5px;
+    text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .barra-custo{ height:4px; border-radius:2px; background:var(--accent); min-width:2px; }
+  .row-click{ cursor:pointer; }
+
   #toastBox{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:80; }
   .toast{
     background:var(--panel2); border:1px solid var(--border2); border-left:4px solid var(--accent);
@@ -258,7 +301,7 @@
   }
 </style>
 </head>
-<body>
+<body class="locked">
 
 <header>
   <div class="brand">
@@ -271,6 +314,7 @@
   <div class="right-controls">
     <button class="btn" id="newLoteBtn" style="display:none;" onclick="openLoteModal()">+ Novo lote</button>
     <button class="btn" id="newLancBtn" style="display:none;" onclick="openLancModal()">+ Lançamento</button>
+    <button class="btn" id="acessosBtn" style="display:none;" onclick="abrirAcessos()">Gerenciar acessos</button>
     <a class="btn" id="sheetBtn" style="display:none;text-decoration:none;" target="_blank" rel="noopener">Abrir planilha</a>
     <button class="btn" id="authBtn" onclick="handleAuthClick()">Entrar para editar</button>
     <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">conectando…</span></div>
@@ -371,8 +415,14 @@
       </div>
     </div>
     <div class="panel">
-      <h2>Ficha técnica — insumos</h2>
-      <div class="table-scroll"><table id="tblInsumos"><thead><tr id="thInsumos"></tr></thead><tbody></tbody></table></div>
+      <div class="panel-head">
+        <div>
+          <h2>Fichas de composição</h2>
+          <p class="hint">Uma linha por produto. Clique na linha para abrir a composição completa e o custeio.</p>
+        </div>
+        <button class="btn btn-primary" id="novaFichaBtn" style="display:none;" onclick="novaFicha()">+ Nova ficha</button>
+      </div>
+      <div class="table-scroll"><table id="tblFichas"><thead><tr id="thFichas"></tr></thead><tbody></tbody></table></div>
     </div>
   </section>
 
@@ -441,6 +491,78 @@
   </div>
 </div>
 
+<div class="overlay" id="compOverlay">
+  <div class="modal wide">
+    <h3 id="compTitulo">Composição do produto</h3>
+    <div class="modal-sub" id="compSub"></div>
+    <div class="comp-head" id="compKpis"></div>
+    <div class="table-scroll" style="max-height:340px">
+      <table id="tblComp"><thead><tr id="thComp"></tr></thead><tbody></tbody></table>
+    </div>
+    <div id="compForm" style="display:none">
+      <hr class="sep">
+      <div class="add-row">
+        <div class="field-row grow"><label for="ciInsumo">Insumo</label>
+          <input id="ciInsumo" type="text" placeholder="ex.: PILSEN" autocomplete="off"></div>
+        <div class="field-row"><label for="ciClasse">Classificação</label><select id="ciClasse"></select></div>
+        <div class="field-row" style="max-width:110px"><label for="ciQtd">Quantidade</label>
+          <input id="ciQtd" type="number" step="any"></div>
+        <div class="field-row" style="max-width:96px"><label for="ciUnid">Unidade</label><select id="ciUnid"></select></div>
+        <div class="field-row" style="max-width:130px"><label for="ciCusto">Custo unitário</label>
+          <input id="ciCusto" type="number" step="any"></div>
+        <button type="button" class="btn btn-primary" id="ciBtn" onclick="salvarInsumo()">Adicionar</button>
+      </div>
+      <p class="hint" id="ciEditando" style="display:none;margin-top:10px"></p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('compOverlay')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="produtoOverlay">
+  <div class="modal">
+    <h3>Nova ficha de composição</h3>
+    <div class="modal-sub">Cadastra o produto na aba Cervejas. Os insumos são adicionados em seguida, na janela de composição.</div>
+    <form id="produtoForm" class="field-grid" onsubmit="return false;"></form>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('produtoOverlay')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="produtoSaveBtn" onclick="salvarProduto()">Criar ficha</button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="brand-mark">🍺</div>
+    <h1>Geezer · Programa de Produção</h1>
+    <p>Este painel é privado. Entre com a conta Google autorizada para ver o programa de produção e o financeiro da cervejaria.</p>
+    <button class="btn btn-primary" onclick="handleAuthClick()">Entrar com Google</button>
+    <div class="gate-msg" id="gateMsg"></div>
+  </div>
+</div>
+
+<div class="overlay" id="acessosOverlay">
+  <div class="modal">
+    <h3>Gerenciar acessos</h3>
+    <div class="modal-sub">Quem pode abrir este painel. <b>Editor</b> vê tudo e lança dados; <b>Leitor</b> só consulta.</div>
+    <div id="acessosLista"></div>
+    <hr class="sep">
+    <div class="add-row">
+      <div class="field-row grow"><label for="acEmail">E-mail para liberar</label>
+        <input id="acEmail" type="text" placeholder="pessoa@exemplo.com" autocomplete="off"></div>
+      <div class="field-row"><label for="acPapel">Acesso</label>
+        <select id="acPapel"><option value="writer">Editor</option><option value="reader">Leitor</option></select></div>
+      <button type="button" class="btn btn-primary" id="acAddBtn" onclick="adicionarAcesso()">Liberar</button>
+    </div>
+    <label class="check"><input type="checkbox" id="acAvisar" checked> Avisar a pessoa por e-mail</label>
+    <div class="modal-actions">
+      <a class="btn" id="acFallback" target="_blank" rel="noopener" style="display:none;text-decoration:none;">Abrir compartilhamento no Google</a>
+      <button type="button" class="btn" onclick="closeModal('acessosOverlay')">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toastBox"></div>
 <div class="tip" id="tip"></div>
 
@@ -475,6 +597,8 @@ const COLS_PRODUCAO = ['Lote','Codigo','Nome da Cerveja','Estilo','ABV%','Tanque
   'Data Inicial','Status','Rotulo','Material Divulgacao','Data Final Real','Observacoes'];
 const COLS_LANC = ['Data','Tipo','Conta','Centro de Custo','Descricao','Valor',
   'Vencimento','Data Pagamento','Status','Lote','Documento'];
+const COLS_INSUMO  = ['Codigo','Estilo','Insumo','Classificacao','Quantidade','Unidade','Custo Unitario'];
+const COLS_CERVEJA = ['Codigo','Nome da Cerveja','Estilo','ABV%','IBU','Cor','Ativo','Volume Padrao (L)'];
 
 // Paleta categórica validada (passo escuro) para as etapas, na ordem do processo.
 // Usada como fallback quando a coluna "Cor" da aba Etapas estiver vazia.
@@ -482,6 +606,8 @@ const ETAPA_FALLBACK = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085
 
 /* ------------------------- ESTADO ------------------------- */
 let accessToken = null, tokenClient = null;
+let podeEditar = false;          // a conta que entrou tem permissao de escrita na planilha?
+let tokenAcessos = null;         // token com escopo extra do Drive (so para gerenciar acessos)
 const DB = {};                 // DB.producao, DB.tanques, ... (arrays de objetos)
 let LOTES = [];                // lotes com cronograma calculado
 let ETAPA_ORDEM = [];          // [{etapa, ordem, ocupa, dur, unid, cor}]
@@ -569,39 +695,46 @@ function textOn(hex){
   return comPreto >= comBranco ? '#0b0e17' : '#ffffff';
 }
 
-/* ------------------------- LEITURA (CSV) -------------------------
-   Sempre /export?format=csv — o endpoint /gviz/tq serve dados em cache
-   e devolve versões antigas da planilha sem avisar.                  */
-function csvUrl(gid){
-  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&t=${Date.now()}`;
+/* ------------------------- LEITURA (Sheets API) -------------------------
+   A planilha e privada: nao existe leitura anonima. Tudo passa pelo token
+   OAuth de quem entrou, numa unica chamada batchGet com todas as abas.
+   Quem nao tiver acesso a planilha recebe 403 e ve a tela de bloqueio.   */
+async function mensagemErro(r){
+  try { const j = await r.json(); return (j.error && j.error.message) || `${r.status} ${r.statusText}`; }
+  catch(e){ return `${r.status} ${r.statusText}`; }
 }
 
-function parseCSV(text){
-  const rows = [];
-  let row = [], field = '', inQ = false;
-  for (let i = 0; i < text.length; i++){
-    const c = text[i], nx = text[i+1];
-    if (inQ){
-      if (c === '"' && nx === '"'){ field += '"'; i++; }
-      else if (c === '"'){ inQ = false; }
-      else { field += c; }
-    } else {
-      if (c === '"'){ inQ = true; }
-      else if (c === ','){ row.push(field); field = ''; }
-      else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
-      else if (c === '\r'){ /* ignora */ }
-      else { field += c; }
-    }
-  }
-  if (field.length || row.length){ row.push(field); rows.push(row); }
-  if (!rows.length) return [];
-  const headers = rows[0].map(h => h.trim());
-  return rows.slice(1).map((r, i) => {
+async function apiGet(url, token){
+  const r = await fetch(url, { headers:{ Authorization:`Bearer ${token || accessToken}` }, cache:'no-store' });
+  if (!r.ok){ const e = new Error(await mensagemErro(r)); e.status = r.status; throw e; }
+  return r.json();
+}
+
+/** Converte a matriz de valores da API em objetos, usando a linha 1 como cabecalho. */
+function tabelaDeValores(values){
+  if (!values || !values.length) return [];
+  const headers = values[0].map(h => String(h == null ? '' : h).trim());
+  return values.slice(1).map((r, i) => {
     const o = {};
-    headers.forEach((h, j) => { o[h] = r[j] !== undefined ? r[j].trim() : ''; });
-    o._row = i + 2;              // linha real na planilha (1 = cabeçalho)
+    headers.forEach((h, j) => {
+      o[h] = (r[j] !== undefined && r[j] !== null) ? String(r[j]).trim() : '';
+    });
+    o._row = i + 2;                 // linha real na planilha (1 = cabecalho)
     return o;
   }).filter(o => headers.some(h => o[h] !== ''));
+}
+
+/** Descobre se a conta que entrou pode escrever: um batchUpdate sem nenhuma
+    requisicao nao altera nada e devolve 403 para quem so tem leitura. */
+async function verificarPermissaoEdicao(){
+  try {
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+      method:'POST',
+      headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ requests: [] }),
+    });
+    podeEditar = r.ok;
+  } catch(e){ podeEditar = false; }
 }
 
 /* ------------------------- ESCRITA (Sheets API v4) ------------------------- */
@@ -718,6 +851,8 @@ function buildApoio(){
       abv:    num(r['ABV%']),
       ibu:    num(r['IBU']),
       cor:    /^#[0-9a-fA-F]{6}$/.test(norm(r['Cor'])) ? norm(r['Cor']) : '#d9a12b',
+      volumePadrao: num(r['Volume Padrao (L)']),
+      _row:   r._row,
     };
   });
 
@@ -858,15 +993,19 @@ function custosPorCerveja(){
       qtd:q, unid:norm(r['Unidade']), custoUnit:cu, custo:q*cu, _row:r._row,
     });
   });
-  // volume de referência = maior volume já usado para esse código na produção
-  const volRef = {};
+  // Volume de referência: o volume padrão cadastrado na aba Cervejas; na falta
+  // dele, o maior volume já produzido desse código.
+  const volLote = {};
   LOTES.forEach(l => {
     const c = key(l.codigo);
-    if (l.volume > 0) volRef[c] = Math.max(volRef[c] || 0, l.volume);
+    if (l.volume > 0) volLote[c] = Math.max(volLote[c] || 0, l.volume);
   });
+  // garante uma entrada para todo produto do catálogo, mesmo sem insumos ainda
+  Object.keys(CERVEJA).forEach(c => { out[c] = out[c] || { total:0, itens:[] }; });
   Object.keys(out).forEach(c => {
-    const v = volRef[c] || 0;
+    const v = (CERVEJA[c] && CERVEJA[c].volumePadrao) || volLote[c] || 0;
     out[c].volume = v;
+    out[c].origemVolume = (CERVEJA[c] && CERVEJA[c].volumePadrao) ? 'padrão' : (volLote[c] ? 'maior lote' : '—');
     out[c].porLitro = v > 0 ? out[c].total / v : null;
   });
   return out;
@@ -1133,7 +1272,7 @@ function renderProducao(){
         LOTES.some(l => key(l.rotulo)==='PENDENTE') ? 'warn' : '', 'rótulo ou material'),
   ].join('');
 
-  const editando = !!accessToken;
+  const editando = podeEditar;
   document.getElementById('thProducao').innerHTML =
     COLS_TBL_PROD.map(c => `<th${['Volume','Progresso'].includes(c) ? ' class="num"' : ''}>${c}</th>`).join('')
     + (editando ? '<th></th>' : '');
@@ -1261,18 +1400,28 @@ function renderReceitas(){
     </tr>`;
   }).join('') || `<tr><td class="empty" colspan="6">Sem insumos cadastrados.</td></tr>`;
 
-  /* Ficha técnica */
-  document.getElementById('thInsumos').innerHTML =
-    ['Código','Cerveja','Insumo','Classificação','Qtd','Unid.','Custo unit.','Custo total']
-    .map((c,i) => `<th${i>=4?' class="num"':''}>${c}</th>`).join('');
-  document.querySelector('#tblInsumos tbody').innerHTML = (DB.insumos || []).map(r => {
-    const c = key(r['Codigo']); const cv = CERVEJA[c] || {};
-    const q = n0(r['Quantidade']), cu = n0(r['Custo Unitario']);
-    return `<tr><td>${esc(r['Codigo'])}</td><td>${esc(cv.nome || r['Estilo'])}</td>
-      <td><b>${esc(r['Insumo'])}</b></td><td><span class="badge mute">${esc(r['Classificacao'])}</span></td>
-      <td class="num">${fmtNum(q, q % 1 ? 2 : 0)}</td><td class="num">${esc(r['Unidade'])}</td>
-      <td class="num">${fmtBRL(cu)}</td><td class="num">${fmtBRL(q*cu)}</td></tr>`;
-  }).join('') || `<tr><td class="empty" colspan="8">Sem insumos cadastrados.</td></tr>`;
+  /* Fichas de composição — uma linha por produto */
+  document.getElementById('novaFichaBtn').style.display = podeEditar ? '' : 'none';
+  document.getElementById('thFichas').innerHTML =
+    ['Código','Produto','Estilo','Itens','Volume ref.','Custo insumos','Custo/L','Marg. insumos','']
+    .map((c,i) => `<th${[3,4,5,6,7].includes(i) ? ' class="num"' : ''}>${c}</th>`).join('');
+  document.querySelector('#tblFichas tbody').innerHTML = codigos.map(c => {
+    const k = custos[c] || { total:0, itens:[], volume:0, porLitro:null };
+    const cv = CERVEJA[c] || {};
+    const mg = (k.porLitro != null && precoL) ? (precoL - k.porLitro) / precoL * 100 : null;
+    return `<tr class="row-click" onclick="abrirComposicao('${esc(c)}')">
+      <td>${esc(c)}</td>
+      <td><b>${esc(cv.nome || c)}</b></td>
+      <td>${esc(cv.estilo || '—')}</td>
+      <td class="num">${k.itens.length || '<span style="color:var(--txt3)">0</span>'}</td>
+      <td class="num">${k.volume ? fmtNum(k.volume) + ' L' : '—'}</td>
+      <td class="num">${k.total ? fmtBRLc(k.total) : '—'}</td>
+      <td class="num">${k.porLitro != null ? fmtBRL(k.porLitro) : '—'}</td>
+      <td class="num">${mg == null ? '—'
+        : `<span class="badge ${mg >= 60 ? 'ok' : (mg >= 40 ? 'warn' : 'err')}">${fmtPct(mg)}</span>`}</td>
+      <td><button class="btn icon-btn" onclick="event.stopPropagation();abrirComposicao('${esc(c)}')">Ver composição</button></td>
+    </tr>`;
+  }).join('') || `<tr><td class="empty" colspan="9">Nenhum produto cadastrado.</td></tr>`;
 }
 </script>
 
@@ -1454,7 +1603,7 @@ function renderFinanceiro(){
   tabelaAberto('thAP','tblAP', aPagar, 'a pagar');
 
   /* ---------- Lançamentos ---------- */
-  const editando = !!accessToken;
+  const editando = podeEditar;
   document.getElementById('thLanc').innerHTML =
     ['Data','Tipo','Conta','Centro de custo','Descrição','Valor','Vencimento','Status','Lote','Doc.']
     .map((c,i) => `<th${i===5?' class="num"':''}>${c}</th>`).join('') + (editando ? '<th></th>' : '');
@@ -1626,18 +1775,243 @@ async function submitLanc(){
   }
 }
 
-/* ------------------------- AUTENTICAÇÃO ------------------------- */
-function applyEditingUI(){
-  const editando = !!accessToken;
-  const badge = document.getElementById('modeBadge');
-  badge.textContent = editando ? 'MODO EDIÇÃO' : 'SOMENTE LEITURA';
-  badge.className   = editando ? 'badge-edit' : 'badge-readonly';
-  document.getElementById('authBtn').textContent = editando ? 'Sair do modo edição' : 'Entrar para editar';
-  ['newLoteBtn','newLancBtn','sheetBtn'].forEach(id => {
-    document.getElementById(id).style.display = editando ? '' : 'none';
+/* ------------------------- FICHA DE COMPOSIÇÃO -------------------------
+   Uma janela por produto: lista os insumos agrupados por classificação,
+   com custo total, participação de cada item e custo por litro. Em modo
+   edição dá para adicionar, alterar e remover itens da ficha.          */
+let COMP_COD = null;      // código do produto aberto
+let COMP_EDIT = null;     // _row do insumo em edição (null = novo)
+
+function abrirComposicao(codigo){
+  COMP_COD = key(codigo);
+  COMP_EDIT = null;
+  limparFormInsumo();
+  document.getElementById('compOverlay').classList.add('open');
+  renderComposicao();
+}
+
+function limparFormInsumo(){
+  ['ciInsumo','ciQtd','ciCusto'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  COMP_EDIT = null;
+  const b = document.getElementById('ciBtn');
+  if (b) b.textContent = 'Adicionar';
+  const e = document.getElementById('ciEditando');
+  if (e) e.style.display = 'none';
+}
+
+function renderComposicao(){
+  const c  = COMP_COD;
+  const cv = CERVEJA[c] || {};
+  const k  = custosPorCerveja()[c] || { total:0, itens:[], volume:0, porLitro:null };
+  const precoL = PARAM['PRECO MEDIO LITRO'] || 0;
+  const mg = (k.porLitro != null && precoL) ? (precoL - k.porLitro) / precoL * 100 : null;
+
+  document.getElementById('compTitulo').textContent = `Composição — ${cv.nome || c}`;
+  document.getElementById('compSub').innerHTML =
+    `${esc(c)}${cv.estilo ? ' · ' + esc(cv.estilo) : ''}`
+    + `${cv.abv != null ? ' · ' + fmtNum(cv.abv,1) + '% ABV' : ''}`
+    + ` — volume de referência ${k.volume ? fmtNum(k.volume) + ' L' : 'não definido'}`
+    + ` <span style="color:var(--txt3)">(${esc(k.origemVolume || '—')})</span>`;
+
+  document.getElementById('compKpis').innerHTML = [
+    ['Itens na ficha', String(k.itens.length)],
+    ['Custo de insumos', fmtBRL(k.total)],
+    ['Custo por litro', k.porLitro != null ? fmtBRL(k.porLitro) : '—'],
+    ['Preço médio/L', precoL ? fmtBRL(precoL) : '—'],
+    ['Margem s/ insumos', mg == null ? '—' : fmtPct(mg)],
+  ].map(([l,v]) => `<div class="comp-kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+
+  document.getElementById('thComp').innerHTML =
+    ['Insumo','Qtd','Unid.','Custo unit.','Custo total','% do custo']
+    .map((h,i) => `<th${i>=1?' class="num"':''}>${h}</th>`).join('')
+    + (podeEditar ? '<th></th>' : '');
+
+  const grupos = {};
+  k.itens.forEach(it => (grupos[it.classe || 'OUTROS'] = grupos[it.classe || 'OUTROS'] || []).push(it));
+  const ordem = Object.keys(grupos).sort((a,b) =>
+    grupos[b].reduce((s,i)=>s+i.custo,0) - grupos[a].reduce((s,i)=>s+i.custo,0));
+  const nCols = 6 + (podeEditar ? 1 : 0);
+
+  let html = '';
+  ordem.forEach(g => {
+    const itens = grupos[g];
+    const sub = itens.reduce((s,i) => s + i.custo, 0);
+    html += `<tr class="grupo-lbl"><td colspan="${nCols - 2}">${esc(g)}</td>`
+          + `<td class="num">${fmtBRL(sub)}</td>`
+          + `<td class="num">${k.total ? fmtPct(sub/k.total*100) : '—'}</td>`
+          + (podeEditar ? '<td></td>' : '') + `</tr>`;
+    itens.forEach(it => {
+      const pct = k.total ? it.custo / k.total * 100 : 0;
+      html += `<tr>
+        <td><b>${esc(it.insumo)}</b>
+          <div class="barra-custo" style="width:${Math.max(2, pct)}%;margin-top:4px"></div></td>
+        <td class="num">${fmtNum(it.qtd, it.qtd % 1 ? 2 : 0)}</td>
+        <td class="num">${esc(it.unid)}</td>
+        <td class="num">${fmtBRL(it.custoUnit)}</td>
+        <td class="num">${fmtBRL(it.custo)}</td>
+        <td class="num">${fmtPct(pct)}</td>
+        ${podeEditar ? `<td style="white-space:nowrap">
+            <button class="btn icon-btn" title="Editar" onclick="editarInsumo(${it._row})">✏️</button>
+            <button class="btn icon-btn" title="Remover" onclick="removerInsumo(${it._row},'${esc(it.insumo)}')">🗑</button>
+          </td>` : ''}
+      </tr>`;
+    });
   });
-  document.getElementById('sheetBtn').href =
-    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+  if (!k.itens.length)
+    html = `<tr><td class="empty" colspan="${nCols}">Nenhum insumo cadastrado para este produto${podeEditar ? ' — adicione abaixo.' : '.'}</td></tr>`;
+  else
+    html += `<tr class="total"><td>Total da ficha</td><td colspan="3"></td>`
+          + `<td class="num">${fmtBRL(k.total)}</td><td class="num">100,0%</td>`
+          + (podeEditar ? '<td></td>' : '') + `</tr>`;
+  document.querySelector('#tblComp tbody').innerHTML = html;
+
+  const form = document.getElementById('compForm');
+  form.style.display = podeEditar ? '' : 'none';
+  if (podeEditar){
+    const opc = (id, vals) => {
+      const el = document.getElementById(id), atual = el.value;
+      el.innerHTML = vals.map(v => `<option>${esc(v)}</option>`).join('');
+      if (atual) el.value = atual;
+    };
+    opc('ciClasse', lista('Classificacao'));
+    opc('ciUnid',   lista('Unidade'));
+  }
+}
+
+function editarInsumo(row){
+  const r = (DB.insumos || []).find(x => x._row === row);
+  if (!r) return;
+  COMP_EDIT = row;
+  document.getElementById('ciInsumo').value = norm(r['Insumo']);
+  document.getElementById('ciClasse').value = norm(r['Classificacao']);
+  document.getElementById('ciQtd').value    = String(n0(r['Quantidade'])).replace(',', '.');
+  document.getElementById('ciUnid').value   = norm(r['Unidade']);
+  document.getElementById('ciCusto').value  = String(n0(r['Custo Unitario'])).replace(',', '.');
+  document.getElementById('ciBtn').textContent = 'Salvar alteração';
+  const av = document.getElementById('ciEditando');
+  av.style.display = '';
+  av.innerHTML = `Editando <b>${esc(norm(r['Insumo']))}</b> — `
+    + `<a href="#" onclick="limparFormInsumo();return false;" style="color:var(--accent)">cancelar e voltar a adicionar</a>`;
+}
+
+async function salvarInsumo(){
+  if (!podeEditar) return toast('Sua conta não tem permissão de edição.', false);
+  const insumo = document.getElementById('ciInsumo').value.trim().toUpperCase();
+  const classe = document.getElementById('ciClasse').value;
+  const qtd    = document.getElementById('ciQtd').value.trim();
+  const unid   = document.getElementById('ciUnid').value;
+  const custo  = document.getElementById('ciCusto').value.trim();
+  if (!insumo) return toast('Informe o nome do insumo.', false);
+  if (!qtd)    return toast('Informe a quantidade.', false);
+
+  const cv = CERVEJA[COMP_COD] || {};
+  const valores = [COMP_COD, cv.estilo || '', insumo, classe, numOut(qtd), unid, numOut(custo)];
+  const btn = document.getElementById('ciBtn');
+  const rotulo = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    if (COMP_EDIT) await updateRow(TABS.insumos.name, COMP_EDIT, valores);
+    else           await appendRow(TABS.insumos.name, valores);
+    toast(COMP_EDIT ? 'Insumo atualizado.' : 'Insumo adicionado à ficha.', true);
+    limparFormInsumo();
+    await refresh();
+    renderComposicao();
+  } catch(e){
+    toast('Erro ao salvar o insumo: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = COMP_EDIT ? 'Salvar alteração' : (rotulo === 'Salvando…' ? 'Adicionar' : rotulo);
+  }
+}
+
+async function removerInsumo(row, nome){
+  if (!podeEditar) return;
+  try {
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`, {
+      method:'POST',
+      headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ requests: [{ deleteDimension: { range: {
+        sheetId: Number(TABS.insumos.gid), dimension:'ROWS',
+        startIndex: row - 1, endIndex: row } } }] }),
+    });
+    if (!r.ok) throw new Error(await mensagemErro(r));
+    toast(`Insumo removido da ficha: ${nome}.`, true);
+    limparFormInsumo();
+    await refresh();
+    renderComposicao();
+  } catch(e){
+    toast('Erro ao remover: ' + e.message, false);
+  }
+}
+
+/* ---------- Nova ficha (cadastro do produto) ---------- */
+function novaFicha(){
+  const n = Object.keys(CERVEJA).length + 1;
+  document.getElementById('produtoForm').innerHTML = [
+    campo('Codigo','text', 'GZR' + String(n).padStart(3,'0')),
+    campo('Nome da Cerveja','text',''),
+    campo('Estilo','text',''),
+    campo('ABV%','number',''),
+    campo('IBU','number',''),
+    campo('Volume Padrao (L)','number',''),
+    campo('Cor','text','#d9a12b'),
+    campo('Ativo','select','SIM',['SIM','NAO']),
+  ].join('');
+  document.getElementById('produtoOverlay').classList.add('open');
+}
+
+async function salvarProduto(){
+  if (!podeEditar) return toast('Sua conta não tem permissão de edição.', false);
+  const form = document.getElementById('produtoForm');
+  const get = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
+  const cod = get('Codigo').toUpperCase();
+  if (!cod) return toast('Informe o código do produto.', false);
+  if (!get('Nome da Cerveja')) return toast('Informe o nome da cerveja.', false);
+  if (CERVEJA[key(cod)]) return toast('Já existe um produto com esse código.', false);
+
+  const valores = COLS_CERVEJA.map(c =>
+    ['ABV%','IBU','Volume Padrao (L)'].includes(c) ? numOut(get(c)) : (c === 'Codigo' ? cod : get(c)));
+  const btn = document.getElementById('produtoSaveBtn');
+  btn.disabled = true; btn.textContent = 'Criando…';
+  try {
+    await appendRow(TABS.cervejas.name, valores);
+    toast('Ficha criada. Agora adicione os insumos.', true);
+    closeModal('produtoOverlay');
+    await refresh();
+    abrirComposicao(cod);
+  } catch(e){
+    toast('Erro ao criar a ficha: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Criar ficha';
+  }
+}
+
+/* ------------------------- AUTENTICAÇÃO -------------------------
+   O painel é privado: sem token não há dados. Toda visibilidade de
+   elemento de edição sai de um único ponto (applyEditingUI), a partir
+   de `podeEditar` — que vem da permissão real da conta na planilha.   */
+const SCOPE_ACESSOS = 'https://www.googleapis.com/auth/drive';
+const URL_PLANILHA  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+
+function applyEditingUI(){
+  const logado = !!accessToken;
+  document.body.classList.toggle('locked', !logado);
+
+  const badge = document.getElementById('modeBadge');
+  badge.textContent = !logado ? 'SOMENTE LEITURA' : (podeEditar ? 'MODO EDIÇÃO' : 'SOMENTE LEITURA');
+  badge.className   = (logado && podeEditar) ? 'badge-edit' : 'badge-readonly';
+  document.getElementById('authBtn').textContent = logado ? 'Sair' : 'Entrar com Google';
+
+  ['newLoteBtn','newLancBtn','acessosBtn','sheetBtn'].forEach(id => {
+    document.getElementById(id).style.display = (logado && podeEditar) ? '' : 'none';
+  });
+  document.getElementById('sheetBtn').href = URL_PLANILHA;
+  document.getElementById('acFallback').href = URL_PLANILHA;
+}
+
+function gateMsg(texto, erro){
+  const el = document.getElementById('gateMsg');
+  el.innerHTML = texto || '';
+  el.className = 'gate-msg' + (erro ? ' err' : '');
 }
 
 function initGis(){
@@ -1645,12 +2019,16 @@ function initGis(){
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    callback: resp => {
-      if (resp.error){ toast('Não foi possível entrar: ' + resp.error, false); return; }
+    callback: async resp => {
+      if (resp.error){
+        gateMsg('Não foi possível entrar: ' + resp.error, true);
+        return;
+      }
       accessToken = resp.access_token;
+      gateMsg('Carregando os dados…');
+      await verificarPermissaoEdicao();
       applyEditingUI();
-      renderTudo();
-      toast('Modo edição ativado.', true);
+      await refresh();
     },
   });
 }
@@ -1658,14 +2036,118 @@ function initGis(){
 function handleAuthClick(){
   if (accessToken){
     google.accounts.oauth2.revoke(accessToken, () => {});
-    accessToken = null;
+    accessToken = null; tokenAcessos = null; podeEditar = false;
+    Object.keys(DB).forEach(k => delete DB[k]);
+    LOTES = [];
     applyEditingUI();
-    renderTudo();
-    toast('Modo edição desativado.', true);
+    gateMsg('Você saiu do painel.');
     return;
   }
-  if (!tokenClient) return toast('Autenticação ainda carregando, tente de novo em 1s.', false);
+  if (!tokenClient){ gateMsg('Autenticação ainda carregando, tente de novo em 1 segundo.', true); return; }
+  gateMsg('Abrindo a janela do Google…');
   tokenClient.requestAccessToken();
+}
+
+/* ------------------------- GERENCIAR ACESSOS -------------------------
+   Usa a API do Drive para listar, liberar e revogar o acesso à planilha.
+   Isso exige um escopo maior que o do resto do painel, então ele só é
+   pedido no momento em que esta janela é aberta — e nunca para quem
+   apenas consulta os dados.                                            */
+function abrirAcessos(){
+  document.getElementById('acessosOverlay').classList.add('open');
+  document.getElementById('acFallback').style.display = 'none';
+  if (tokenAcessos) return listarAcessos();
+  document.getElementById('acessosLista').innerHTML =
+    '<p class="hint">Pedindo ao Google a permissão para gerenciar o compartilhamento…</p>';
+  const cli = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE_ACESSOS,
+    callback: resp => {
+      if (resp.error){ falhaAcessos('O Google não liberou a permissão (' + resp.error + ').'); return; }
+      tokenAcessos = resp.access_token;
+      listarAcessos();
+    },
+  });
+  cli.requestAccessToken();
+}
+
+function falhaAcessos(msg){
+  document.getElementById('acessosLista').innerHTML =
+    `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`
+    + `<p class="hint">Você ainda consegue liberar acesso pela tela de compartilhamento da própria planilha.</p>`;
+  document.getElementById('acFallback').style.display = '';
+}
+
+const PAPEL = { owner:'Proprietário', writer:'Editor', reader:'Leitor', commenter:'Comentarista' };
+
+async function listarAcessos(){
+  const box = document.getElementById('acessosLista');
+  box.innerHTML = '<p class="hint">Carregando…</p>';
+  try {
+    const j = await apiGet(
+      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions`
+      + `?fields=permissions(id,type,role,emailAddress,displayName)&supportsAllDrives=true`,
+      tokenAcessos);
+    const ps = (j.permissions || []).filter(p => p.type === 'user' || p.type === 'anyone');
+    box.innerHTML = ps.length ? ps.map(p => {
+      const dono = p.role === 'owner';
+      const nome = p.type === 'anyone'
+        ? 'Qualquer pessoa com o link'
+        : (p.emailAddress || p.displayName || '—');
+      return `<div class="acesso-item">
+        <span class="acesso-mail">${esc(nome)}<small>${esc(PAPEL[p.role] || p.role)}</small></span>
+        ${dono ? '<span class="badge mute">dono</span>'
+               : `<button class="btn icon-btn" title="Remover acesso"
+                    onclick="removerAcesso('${esc(p.id)}','${esc(nome)}')">Remover</button>`}
+      </div>`;
+    }).join('') : '<p class="hint">Só você tem acesso.</p>';
+  } catch(e){
+    falhaAcessos(e.status === 403
+      ? 'Sua conta não tem permissão para gerenciar o compartilhamento desta planilha.'
+      : 'Não foi possível ler a lista de acessos: ' + e.message);
+  }
+}
+
+async function adicionarAcesso(){
+  const email  = document.getElementById('acEmail').value.trim();
+  const papel  = document.getElementById('acPapel').value;
+  const avisar = document.getElementById('acAvisar').checked;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Digite um e-mail válido.', false);
+  if (!tokenAcessos) return toast('Permissão do Google ainda não concedida.', false);
+
+  const btn = document.getElementById('acAddBtn');
+  btn.disabled = true; btn.textContent = 'Liberando…';
+  try {
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions`
+      + `?sendNotificationEmail=${avisar}&supportsAllDrives=true`,
+      { method:'POST',
+        headers:{ Authorization:`Bearer ${tokenAcessos}`, 'Content-Type':'application/json' },
+        body: JSON.stringify({ type:'user', role:papel, emailAddress:email }) });
+    if (!r.ok) throw new Error(await mensagemErro(r));
+    document.getElementById('acEmail').value = '';
+    toast(`Acesso de ${PAPEL[papel]} liberado para ${email}.`, true);
+    listarAcessos();
+  } catch(e){
+    toast('Não foi possível liberar: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Liberar';
+  }
+}
+
+async function removerAcesso(id, nome){
+  if (!tokenAcessos) return;
+  try {
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions/${encodeURIComponent(id)}`
+      + `?supportsAllDrives=true`,
+      { method:'DELETE', headers:{ Authorization:`Bearer ${tokenAcessos}` } });
+    if (!r.ok) throw new Error(await mensagemErro(r));
+    toast(`Acesso removido: ${nome}.`, true);
+    listarAcessos();
+  } catch(e){
+    toast('Não foi possível remover: ' + e.message, false);
+  }
 }
 
 /* ------------------------- NAVEGAÇÃO ------------------------- */
@@ -1696,16 +2178,23 @@ function renderTudo(){
 }
 
 async function refresh(){
+  if (!accessToken) return;                       // sem login nao ha leitura
   const chaves = Object.keys(TABS);
+  const ranges = chaves.map(k => `ranges=${encodeURIComponent(TABS[k].name)}`).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet`
+            + `?${ranges}&majorDimension=ROWS`
+            + `&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
   try {
-    const res = await Promise.all(chaves.map(k => fetch(csvUrl(TABS[k].gid), { cache:'no-store' })));
-    for (let i = 0; i < chaves.length; i++){
-      if (!res[i].ok) throw new Error(`Não foi possível ler a aba ${TABS[chaves[i]].name}`);
-      DB[chaves[i]] = parseCSV(await res[i].text());
-    }
+    const j = await apiGet(url);
+    const vr = j.valueRanges || [];
+    chaves.forEach((k, i) => { DB[k] = tabelaDeValores(vr[i] && vr[i].values); });
+
     renderTudo();
+    document.body.classList.remove('locked');
+    gateMsg('');
     document.getElementById('sourceLabel').textContent =
       `${(DB.producao||[]).length} lotes · ${(DB.lancamentos||[]).length} lançamentos · `
+      + `${podeEditar ? 'edição liberada' : 'somente leitura'} · `
       + `atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
     document.getElementById('statusDot').className = 'dot';
     document.getElementById('statusText').textContent = 'conectado';
@@ -1713,14 +2202,24 @@ async function refresh(){
     console.error(e);
     document.getElementById('statusDot').className = 'dot err';
     document.getElementById('statusText').textContent = 'erro ao conectar';
-    document.getElementById('sourceLabel').textContent =
-      'Não foi possível ler a planilha. Confira se ela está compartilhada como "qualquer pessoa com o link".';
+
+    if (e.status === 401){                        // token expirou (vale ~1h)
+      accessToken = null; podeEditar = false;
+      applyEditingUI();
+      gateMsg('Sua sessão expirou. Entre novamente para continuar.');
+    } else if (e.status === 403 || e.status === 404){
+      accessToken = null; podeEditar = false;
+      applyEditingUI();
+      gateMsg('Esta conta Google não tem acesso ao painel da Geezer.<br>'
+            + 'Peça a liberação a quem administra a planilha e tente de novo.', true);
+    } else {
+      gateMsg('Não foi possível carregar os dados: ' + esc(e.message), true);
+    }
   }
 }
 
 applyEditingUI();
 initGis();
-refresh();
 setInterval(refresh, 120000);
 </script>
 </body>
