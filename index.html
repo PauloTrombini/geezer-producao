@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geezer — Programa de Produção</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#0b0e17; --panel:#111726; --panel2:#171f33; --panel3:#1d2740;
+    --border:#232b42; --border2:#2e3a58;
+    --txt:#e8ecf5; --txt2:#95a0c4; --txt3:#6c769b;
+    --accent:#4f8cff; --green:#2fd08a; --amber:#f5b942; --red:#f5615c;
+
+    /* Paleta categórica validada (passo escuro) — etapas do processo */
+    --et1:#3987e5; --et2:#d95926; --et3:#199e70; --et4:#c98500;
+    --et5:#d55181; --et6:#008300; --et7:#9085e9;
+    /* Fluxo de caixa: par divergente entrada/saída */
+    --serie-entrada:#3987e5; --serie-saida:#e66767;
+
+    --radius:12px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ max-width:100%; overflow-x:hidden; }
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:14px; line-height:1.45;
+  }
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;
+    padding:16px 26px; border-bottom:1px solid var(--border); background:var(--panel);
+    position:sticky; top:0; z-index:30;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:38px; height:38px; border-radius:10px; flex:none;
+    background:linear-gradient(150deg,#f0b429,#c96a1f);
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+  }
+  header h1{ margin:0; font-size:17px; letter-spacing:-.01em; }
+  header .sub{ color:var(--txt2); font-size:12px; margin-top:1px; }
+  .right-controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .btn{
+    background:var(--panel2); border:1px solid var(--border2); color:var(--txt);
+    border-radius:9px; padding:8px 14px; font-size:13px; cursor:pointer;
+    font-family:inherit; transition:border-color .15s, background .15s;
+  }
+  .btn:hover{ border-color:var(--accent); }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:#3d7bf0; }
+  .badge-readonly{ background:rgba(149,160,196,.16); color:var(--txt2); padding:3px 9px; border-radius:20px; font-size:10.5px; margin-left:8px; letter-spacing:.03em; vertical-align:middle; }
+  .badge-edit{ background:rgba(47,208,138,.16); color:var(--green); padding:3px 9px; border-radius:20px; font-size:10.5px; margin-left:8px; letter-spacing:.03em; vertical-align:middle; }
+  .status{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--txt2); }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--green); flex:none; }
+  .dot.err{ background:var(--red); }
+
+  /* ---------- Nav ---------- */
+  nav{
+    display:flex; gap:2px; padding:0 26px; border-bottom:1px solid var(--border);
+    background:var(--panel); overflow-x:auto; position:sticky; top:71px; z-index:29;
+  }
+  nav button{
+    background:none; border:none; border-bottom:2px solid transparent; color:var(--txt2);
+    padding:11px 15px; font-size:13px; cursor:pointer; white-space:nowrap; font-family:inherit;
+  }
+  nav button:hover{ color:var(--txt); }
+  nav button.active{ color:var(--txt); border-bottom-color:var(--accent); }
+
+  main{ padding:22px 26px 70px; max-width:1680px; margin:0 auto; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ---------- KPIs ---------- */
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:18px; }
+  .kpi{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .kpi .label{ color:var(--txt2); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; }
+  .kpi .value{ font-size:22px; font-weight:650; margin-top:5px; letter-spacing:-.02em; }
+  .kpi .foot{ color:var(--txt3); font-size:11.5px; margin-top:3px; }
+  .kpi .value.pos{ color:var(--green); }
+  .kpi .value.neg{ color:var(--red); }
+  .kpi .value.warn{ color:var(--amber); }
+
+  /* ---------- Painéis ---------- */
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:16px; }
+  .panel h2{
+    margin:0 0 4px; font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--txt2);
+  }
+  .panel .hint{ color:var(--txt3); font-size:12px; margin:0 0 14px; }
+  .panel-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:1100px){ .grid2{ grid-template-columns:1fr; } }
+
+  /* ---------- Tanques ---------- */
+  .tanks{ display:grid; grid-template-columns:repeat(auto-fill,minmax(212px,1fr)); gap:14px; }
+  .tank-card{
+    background:var(--panel2); border:1px solid var(--border); border-radius:var(--radius);
+    padding:13px 13px 15px; display:flex; flex-direction:column;
+  }
+  .tank-card.free{ opacity:.75; }
+  .tank-top{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:2px; }
+  .tank-name{ font-weight:650; font-size:15px; letter-spacing:.01em; }
+  .tank-cap{ color:var(--txt3); font-size:11.5px; }
+  .tank-svg{ display:block; margin:2px auto 6px; }
+  .tank-beer{ font-weight:600; font-size:13.5px; line-height:1.3; }
+  .tank-meta{ color:var(--txt2); font-size:11.5px; margin-top:1px; }
+  .stage-pill{
+    display:inline-flex; align-items:center; gap:6px; margin-top:8px;
+    padding:3px 9px 3px 7px; border-radius:20px; font-size:11px; font-weight:600;
+    background:var(--panel3); border:1px solid var(--border2);
+  }
+  .stage-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .bar{ height:5px; background:var(--panel3); border-radius:3px; margin-top:9px; overflow:hidden; }
+  .bar > span{ display:block; height:100%; border-radius:3px; background:var(--accent); }
+  .tank-foot{ color:var(--txt2); font-size:11.5px; margin-top:6px; }
+  .tank-foot b{ color:var(--txt); font-weight:600; }
+  .queue{ margin-top:9px; padding-top:9px; border-top:1px solid var(--border); }
+  .queue-lbl{ color:var(--txt3); font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+  .chip{
+    display:flex; align-items:center; gap:6px; margin-top:5px;
+    background:var(--panel3); border:1px solid var(--border2); border-radius:7px;
+    padding:4px 7px; font-size:11.5px;
+  }
+  .chip .sw{ width:9px; height:9px; border-radius:2px; flex:none; }
+  .chip .dt{ margin-left:auto; color:var(--txt3); font-size:11px; white-space:nowrap; }
+
+  /* ---------- Timeline ---------- */
+  .tl-wrap{ overflow-x:auto; padding-bottom:6px; }
+  .tl{ position:relative; min-width:100%; }
+  .tl-row{ display:flex; align-items:stretch; border-bottom:1px solid var(--border); }
+  .tl-row:last-child{ border-bottom:none; }
+  .tl-label{
+    width:118px; flex:none; padding:10px 12px; font-size:12.5px; font-weight:600;
+    position:sticky; left:0; background:var(--panel); z-index:2; border-right:1px solid var(--border);
+  }
+  .tl-label small{ display:block; color:var(--txt3); font-weight:400; font-size:11px; }
+  .tl-track{ position:relative; flex:1; min-height:62px; }
+  .tl-head .tl-track{ min-height:34px; }
+  .tl-month{
+    position:absolute; top:0; height:34px; border-left:1px solid var(--border2);
+    padding:17px 0 0 6px; font-size:11px; color:var(--txt2); text-transform:uppercase; letter-spacing:.05em;
+  }
+  .tl-grid{ position:absolute; top:0; bottom:0; width:1px; background:var(--border); }
+  .tl-grid.week{ background:var(--border2); }
+  .tl-today{ position:absolute; top:0; bottom:0; width:2px; background:var(--amber); z-index:3; }
+  .tl-today-lbl{
+    position:absolute; top:1px; font-size:10px; color:#0b0e17; background:var(--amber);
+    padding:1px 5px; border-radius:4px; font-weight:700; transform:translateX(-50%); z-index:4;
+  }
+  .tl-bar{ position:absolute; top:23px; height:30px; display:flex; z-index:1; }
+  .tl-name{
+    position:absolute; top:4px; font-size:10.5px; font-weight:700; color:var(--txt2);
+    white-space:nowrap; letter-spacing:.01em; z-index:1;
+  }
+  .tl-seg{ height:100%; overflow:hidden; margin-right:2px; position:relative; }
+  .tl-seg:first-child{ border-radius:5px 0 0 5px; }
+  .tl-seg:last-child{ border-radius:0 5px 5px 0; margin-right:0; }
+  .tl-seg:only-child{ border-radius:5px; }
+  .tl-seg span{
+    position:absolute; inset:0; display:flex; align-items:center; padding:0 5px;
+    font-size:10px; font-weight:700; white-space:nowrap;
+  }
+  .tl-bar.planned{ opacity:.62; }
+  .tl-bar.planned::after{
+    content:""; position:absolute; inset:0; border:1px dashed rgba(255,255,255,.55); border-radius:5px;
+  }
+  .legend{ display:flex; flex-wrap:wrap; gap:12px; margin-top:14px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--txt2); }
+  .legend-sw{ width:11px; height:11px; border-radius:3px; flex:none; }
+
+  /* ---------- Tabelas ---------- */
+  .table-scroll{ overflow:auto; max-height:560px; border-radius:8px; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td{ padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th{
+    color:var(--txt2); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+    position:sticky; top:0; background:var(--panel); z-index:2;
+  }
+  tbody tr:hover td{ background:var(--panel2); }
+  td.num, th.num{ text-align:right; font-variant-numeric:tabular-nums; }
+  td.empty{ color:var(--txt3); text-align:center; padding:26px; }
+  tr.total td{ font-weight:700; border-top:1px solid var(--border2); background:var(--panel2); }
+  tr.sub td{ color:var(--txt2); }
+
+  .badge{ display:inline-block; padding:2.5px 8px; border-radius:20px; font-size:10.5px; font-weight:600; }
+  .badge.ok{ background:rgba(47,208,138,.16); color:var(--green); }
+  .badge.warn{ background:rgba(245,185,66,.16); color:var(--amber); }
+  .badge.err{ background:rgba(245,97,92,.16); color:var(--red); }
+  .badge.info{ background:rgba(79,140,255,.16); color:var(--accent); }
+  .badge.mute{ background:rgba(149,160,196,.14); color:var(--txt2); }
+  .icon-btn{ padding:3px 7px; font-size:12px; line-height:1.2; }
+
+  /* ---------- Gráfico fluxo de caixa ---------- */
+  .chart{
+    display:flex; align-items:flex-end; gap:10px; height:196px; padding:18px 4px 0;
+    border-bottom:1px solid var(--border2); position:relative; overflow-x:auto;
+  }
+  .chart-max{
+    position:absolute; top:0; left:0; right:0; border-top:1px dashed var(--border2);
+    font-size:10.5px; color:var(--txt3); padding-top:2px;
+  }
+  .chart-col{ flex:0 0 92px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:6px; height:100%; }
+  .chart-pair{ display:flex; align-items:flex-end; gap:3px; width:100%; height:100%; justify-content:center; }
+  .chart-bar{ width:38%; max-width:30px; border-radius:4px 4px 0 0; min-height:2px; position:relative; cursor:default; }
+  .chart-x{ font-size:11px; color:var(--txt2); white-space:nowrap; }
+
+  /* ---------- Filtros ---------- */
+  .filters{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .filters label{ font-size:11.5px; color:var(--txt2); }
+  select,input[type=text],input[type=date],input[type=number]{
+    background:var(--panel2); border:1px solid var(--border2); color:var(--txt);
+    border-radius:8px; padding:7px 9px; font-size:13px; font-family:inherit;
+  }
+  select:focus,input:focus{ outline:2px solid var(--accent); outline-offset:-1px; }
+
+  /* ---------- Modais ---------- */
+  .overlay{
+    display:none; position:fixed; inset:0; background:rgba(4,7,14,.7);
+    align-items:center; justify-content:center; z-index:60; padding:20px;
+  }
+  .overlay.open{ display:flex; }
+  .modal{
+    background:var(--panel); border:1px solid var(--border2); border-radius:14px;
+    width:100%; max-width:620px; max-height:88vh; overflow:auto; padding:22px 24px;
+  }
+  .modal h3{ margin:0 0 4px; font-size:17px; }
+  .modal .modal-sub{ color:var(--txt2); font-size:12.5px; margin-bottom:18px; }
+  .field-grid{ display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+  @media (max-width:560px){ .field-grid{ grid-template-columns:1fr; } }
+  .field-row label{ display:block; font-size:10.5px; color:var(--txt2); text-transform:uppercase; letter-spacing:.04em; margin-bottom:5px; }
+  .field-row input, .field-row select{ width:100%; }
+  .field-row.wide{ grid-column:1 / -1; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+  #toastBox{ position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:80; }
+  .toast{
+    background:var(--panel2); border:1px solid var(--border2); border-left:4px solid var(--accent);
+    color:var(--txt); padding:11px 16px; border-radius:9px; font-size:13px; max-width:340px;
+  }
+  .toast.ok{ border-left-color:var(--green); }
+  .toast.err{ border-left-color:var(--red); }
+
+  .tip{
+    position:fixed; z-index:90; pointer-events:none; display:none;
+    background:#060a12; border:1px solid var(--border2); border-radius:9px;
+    padding:9px 11px; font-size:12px; max-width:280px; box-shadow:0 8px 26px rgba(0,0,0,.5);
+  }
+  .tip.show{ display:block; }
+  .tip b{ display:block; margin-bottom:3px; font-size:12.5px; }
+  .tip .r{ color:var(--txt2); }
+
+  @media (max-width:640px){
+    header{ padding:13px 15px; } nav{ padding:0 15px; top:auto; position:static; }
+    main{ padding:15px 13px 50px; }
+    .right-controls .btn{ flex:1 1 auto; text-align:center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">🍺</div>
+    <div>
+      <h1>Geezer · Programa de Produção <span class="badge-readonly" id="modeBadge">SOMENTE LEITURA</span></h1>
+      <div class="sub" id="sourceLabel">carregando…</div>
+    </div>
+  </div>
+  <div class="right-controls">
+    <button class="btn" id="newLoteBtn" style="display:none;" onclick="openLoteModal()">+ Novo lote</button>
+    <button class="btn" id="newLancBtn" style="display:none;" onclick="openLancModal()">+ Lançamento</button>
+    <a class="btn" id="sheetBtn" style="display:none;text-decoration:none;" target="_blank" rel="noopener">Abrir planilha</a>
+    <button class="btn" id="authBtn" onclick="handleAuthClick()">Entrar para editar</button>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">conectando…</span></div>
+  </div>
+</header>
+
+<nav id="nav">
+  <button class="active" data-view="v-tanques">Fermentadores</button>
+  <button data-view="v-timeline">Timeline</button>
+  <button data-view="v-producao">Produção</button>
+  <button data-view="v-receitas">Receitas &amp; Custos</button>
+  <button data-view="v-financeiro">Financeiro</button>
+</nav>
+
+<main>
+
+  <!-- ============ FERMENTADORES ============ -->
+  <section class="view active" id="v-tanques">
+    <div class="kpis" id="kpiTanques"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Sala de fermentação</h2>
+          <p class="hint">O nível do desenho representa o volume do lote em relação à capacidade do tanque. O tanque fica ocupado da fermentação até o fim do envase.</p>
+        </div>
+      </div>
+      <div class="tanks" id="tanks"></div>
+      <div class="legend" id="legendEtapas"></div>
+    </div>
+  </section>
+
+  <!-- ============ TIMELINE ============ -->
+  <section class="view" id="v-timeline">
+    <div class="filters">
+      <label for="tlRange">Janela</label>
+      <select id="tlRange" onchange="renderTimeline()">
+        <option value="45">45 dias</option>
+        <option value="90" selected>90 dias</option>
+        <option value="180">180 dias</option>
+      </select>
+      <label for="tlZoom">Zoom</label>
+      <select id="tlZoom" onchange="renderTimeline()">
+        <option value="10">Compacto</option>
+        <option value="16" selected>Normal</option>
+        <option value="26">Ampliado</option>
+      </select>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Timeline por fermentador</h2>
+          <p class="hint">Cada faixa é um lote, dividido pelas etapas do processo conforme o lead time da receita. A linha amarela é hoje.</p>
+        </div>
+      </div>
+      <div class="tl-wrap"><div class="tl" id="tl"></div></div>
+      <div class="legend" id="legendEtapas2"></div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUÇÃO ============ -->
+  <section class="view" id="v-producao">
+    <div class="kpis" id="kpiProducao"></div>
+    <div class="filters">
+      <label for="fStatus">Status</label>
+      <select id="fStatus" onchange="renderProducao()"><option value="">Todos</option></select>
+      <label for="fTanque">Tanque</label>
+      <select id="fTanque" onchange="renderProducao()"><option value="">Todos</option></select>
+      <label for="fBusca">Busca</label>
+      <input type="text" id="fBusca" placeholder="lote, cerveja, estilo…" oninput="renderProducao()">
+    </div>
+    <div class="panel">
+      <h2>Lotes</h2>
+      <p class="hint">Etapa atual, previsão de envase e liberação do tanque são calculadas a partir da data inicial e do lead time da receita.</p>
+      <div class="table-scroll">
+        <table id="tblProducao"><thead><tr id="thProducao"></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Cronograma detalhado do lote selecionado</h2>
+      <p class="hint">Clique em uma linha da tabela acima para ver as datas etapa por etapa.</p>
+      <div class="table-scroll"><table id="tblCronograma"><thead><tr id="thCron"></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ RECEITAS ============ -->
+  <section class="view" id="v-receitas">
+    <div class="kpis" id="kpiReceitas"></div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Lead time por cerveja</h2>
+        <p class="hint">Duração de cada etapa. É isso que monta a timeline.</p>
+        <div class="table-scroll"><table id="tblLead"><thead><tr id="thLead"></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Custo de insumos por cerveja</h2>
+        <p class="hint">Ficha técnica × custo unitário. A margem considera só o custo de insumos — embalagem, mão de obra e impostos entram no DRE.</p>
+        <div class="table-scroll"><table id="tblCusto"><thead><tr id="thCusto"></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Ficha técnica — insumos</h2>
+      <div class="table-scroll"><table id="tblInsumos"><thead><tr id="thInsumos"></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ FINANCEIRO ============ -->
+  <section class="view" id="v-financeiro">
+    <div class="kpis" id="kpiFin1"></div>
+    <div class="kpis" id="kpiFin2"></div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>DRE gerencial — acumulado</h2>
+        <p class="hint">Regime de competência, pela data do lançamento.</p>
+        <div class="table-scroll"><table id="tblDRE"><tbody></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Fluxo de caixa mensal</h2>
+        <p class="hint">Entradas e saídas por mês de vencimento. Valores em R$.</p>
+        <div class="chart" id="chartFluxo"></div>
+        <div class="legend">
+          <div class="legend-item"><span class="legend-sw" style="background:var(--serie-entrada)"></span>Entradas</div>
+          <div class="legend-item"><span class="legend-sw" style="background:var(--serie-saida)"></span>Saídas</div>
+        </div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Contas a receber</h2>
+        <div class="table-scroll" style="max-height:300px"><table id="tblAR"><thead><tr id="thAR"></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h2>Contas a pagar</h2>
+        <div class="table-scroll" style="max-height:300px"><table id="tblAP"><thead><tr id="thAP"></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Lançamentos</h2><p class="hint">Todos os lançamentos financeiros, do mais recente para o mais antigo.</p></div>
+      </div>
+      <div class="table-scroll"><table id="tblLanc"><thead><tr id="thLanc"></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ MODAIS ============ -->
+<div class="overlay" id="loteOverlay">
+  <div class="modal">
+    <h3 id="loteTitle">Novo lote</h3>
+    <div class="modal-sub">As alterações são gravadas direto na planilha do Google Sheets.</div>
+    <form id="loteForm" class="field-grid" onsubmit="return false;"></form>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('loteOverlay')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="loteSaveBtn" onclick="submitLote()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="lancOverlay">
+  <div class="modal">
+    <h3 id="lancTitle">Novo lançamento</h3>
+    <div class="modal-sub">Entradas e saídas gravadas na aba Fin_Lancamentos.</div>
+    <form id="lancForm" class="field-grid" onsubmit="return false;"></form>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('lancOverlay')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="lancSaveBtn" onclick="submitLanc()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastBox"></div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* =====================================================================
+   GEEZER — PROGRAMA DE PRODUÇÃO
+   Dashboard estático HTML5. A planilha do Google Sheets é o banco de dados:
+   leitura pública via /export?format=csv, escrita via Sheets API v4 com
+   token OAuth obtido no navegador (sem backend).
+   ===================================================================== */
+
+/* ------------------------- CONFIG ------------------------- */
+const SHEET_ID  = '1PysLxO4MFOk_k1R8neUzIwqNszxE3SxcGH-ofh7eXn4';
+const CLIENT_ID = '446804769711-9d2f71d7mf1q464o0ffcu08prkldka32.apps.googleusercontent.com';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets';
+
+const TABS = {
+  producao:   { name:'Producao',          gid:'0'          },
+  tanques:    { name:'Fermentadores',     gid:'801552836'  },
+  etapas:     { name:'Etapas',            gid:'1888622713' },
+  cervejas:   { name:'Cervejas',          gid:'1521228135' },
+  leadtime:   { name:'Receitas_Etapas',   gid:'734001869'  },
+  insumos:    { name:'Receitas_Insumos',  gid:'2050542506' },
+  listas:     { name:'Listas',            gid:'1687872916' },
+  plano:      { name:'Fin_PlanoContas',   gid:'1271583575' },
+  lancamentos:{ name:'Fin_Lancamentos',   gid:'1598248602' },
+  parametros: { name:'Fin_Parametros',    gid:'1861062212' },
+};
+
+// Ordem das colunas ao gravar uma linha nova/editada (tem que bater com a planilha)
+const COLS_PRODUCAO = ['Lote','Codigo','Nome da Cerveja','Estilo','ABV%','Tanque','Volume (L)',
+  'Data Inicial','Status','Rotulo','Material Divulgacao','Data Final Real','Observacoes'];
+const COLS_LANC = ['Data','Tipo','Conta','Centro de Custo','Descricao','Valor',
+  'Vencimento','Data Pagamento','Status','Lote','Documento'];
+
+// Paleta categórica validada (passo escuro) para as etapas, na ordem do processo.
+// Usada como fallback quando a coluna "Cor" da aba Etapas estiver vazia.
+const ETAPA_FALLBACK = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085e9','#008300'];
+
+/* ------------------------- ESTADO ------------------------- */
+let accessToken = null, tokenClient = null;
+const DB = {};                 // DB.producao, DB.tanques, ... (arrays de objetos)
+let LOTES = [];                // lotes com cronograma calculado
+let ETAPA_ORDEM = [];          // [{etapa, ordem, ocupa, dur, unid, cor}]
+let ETAPA_COR = {};            // { ETAPA: '#hex' }
+let CERVEJA = {};              // { CODIGO: {nome, estilo, cor, abv, ibu} }
+let PARAM = {};                // { PARAMETRO: valor }
+let loteSelecionado = null;
+
+/* ------------------------- UTILITÁRIOS ------------------------- */
+const DIA_MS = 86400000;
+const norm = s => String(s == null ? '' : s).trim();
+const up   = s => norm(s).toUpperCase();
+
+/** Aceita "1.234,56" (pt-BR) e "1234.56" (ISO). */
+function num(v){
+  const s = norm(v);
+  if (!s) return null;
+  let t = s.replace(/[R$\s%]/g, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+const n0 = v => num(v) || 0;
+
+/** Aceita AAAA-MM-DD e DD/MM/AAAA — a planilha pode devolver os dois. */
+function parseDate(v){
+  const s = norm(v);
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  return null;
+}
+function fmtDate(d){
+  if (!(d instanceof Date) || isNaN(d)) return '—';
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+function fmtDateShort(d){
+  if (!(d instanceof Date) || isNaN(d)) return '—';
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}`;
+}
+function toISO(d){
+  if (!(d instanceof Date) || isNaN(d)) return '';
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+const hoje = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const addDias = (d, n) => new Date(d.getTime() + n * DIA_MS);
+const diffDias = (a, b) => Math.round((b - a) / DIA_MS);
+
+const fmtNum = (n, d=0) => n == null ? '—'
+  : n.toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtBRL = n => n == null ? '—'
+  : n.toLocaleString('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtBRLc = n => n == null ? '—'
+  : n.toLocaleString('pt-BR', {style:'currency', currency:'BRL', minimumFractionDigits:0, maximumFractionDigits:0});
+const fmtPct = n => n == null ? '—' : `${n.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/** Clareia/escurece um hex — usado nos degradês do tanque. */
+function shade(hex, amt){
+  const h = norm(hex).replace('#','');
+  if (h.length !== 6) return hex;
+  const f = i => {
+    const v = Math.round(parseInt(h.substr(i,2),16) + amt);
+    return Math.max(0, Math.min(255, v)).toString(16).padStart(2,'0');
+  };
+  return `#${f(0)}${f(2)}${f(4)}`;
+}
+
+/** Preto ou branco, o que tiver mais contraste sobre a cor de fundo. */
+function textOn(hex){
+  const h = norm(hex).replace('#','');
+  if (h.length !== 6) return '#0b0e17';
+  const lin = c => { c /= 255; return c <= .03928 ? c/12.92 : Math.pow((c+.055)/1.055, 2.4); };
+  const L = .2126*lin(parseInt(h.substr(0,2),16))
+          + .7152*lin(parseInt(h.substr(2,2),16))
+          + .0722*lin(parseInt(h.substr(4,2),16));
+  const comPreto  = (L + .05) / .05;      // razão de contraste com texto preto
+  const comBranco = 1.05 / (L + .05);      // razão de contraste com texto branco
+  return comPreto >= comBranco ? '#0b0e17' : '#ffffff';
+}
+
+/* ------------------------- LEITURA (CSV) -------------------------
+   Sempre /export?format=csv — o endpoint /gviz/tq serve dados em cache
+   e devolve versões antigas da planilha sem avisar.                  */
+function csvUrl(gid){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}&t=${Date.now()}`;
+}
+
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i], nx = text[i+1];
+    if (inQ){
+      if (c === '"' && nx === '"'){ field += '"'; i++; }
+      else if (c === '"'){ inQ = false; }
+      else { field += c; }
+    } else {
+      if (c === '"'){ inQ = true; }
+      else if (c === ','){ row.push(field); field = ''; }
+      else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c === '\r'){ /* ignora */ }
+      else { field += c; }
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).map((r, i) => {
+    const o = {};
+    headers.forEach((h, j) => { o[h] = r[j] !== undefined ? r[j].trim() : ''; });
+    o._row = i + 2;              // linha real na planilha (1 = cabeçalho)
+    return o;
+  }).filter(o => headers.some(h => o[h] !== ''));
+}
+
+/* ------------------------- ESCRITA (Sheets API v4) ------------------------- */
+async function apiFetch(url, opts){
+  const r = await fetch(url, opts);
+  if (!r.ok){
+    let msg = r.status + ' ' + r.statusText;
+    try { const j = await r.json(); if (j.error && j.error.message) msg = j.error.message; } catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+function appendRow(tabName, values){
+  return apiFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(tabName)}:append`
+      + `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method:'POST',
+      headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values:[values] }) });
+}
+function updateRow(tabName, rowNum, values){
+  const lastCol = colLetter(values.length);
+  return apiFetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/`
+      + `${encodeURIComponent(tabName)}!A${rowNum}:${lastCol}${rowNum}?valueInputOption=USER_ENTERED`,
+    { method:'PUT',
+      headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values:[values] }) });
+}
+function colLetter(n){
+  let s = '';
+  while (n > 0){ const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - 1 - r) / 26; }
+  return s;
+}
+
+/* ------------------------- UI utilitária ------------------------- */
+function kpi(label, value, cls, foot){
+  return `<div class="kpi"><div class="label">${esc(label)}</div>`
+       + `<div class="value ${cls||''}">${value}</div>`
+       + (foot ? `<div class="foot">${foot}</div>` : '') + `</div>`;
+}
+function toast(msg, ok){
+  const el = document.createElement('div');
+  el.className = 'toast ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  document.getElementById('toastBox').appendChild(el);
+  setTimeout(() => el.remove(), 6500);
+}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+const tipEl = document.getElementById('tip');
+function showTip(ev, html){
+  tipEl.innerHTML = html;
+  tipEl.classList.add('show');
+  const r = tipEl.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width  > window.innerWidth  - 8) x = ev.clientX - r.width  - 14;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 14;
+  tipEl.style.left = Math.max(8, x) + 'px';
+  tipEl.style.top  = Math.max(8, y) + 'px';
+}
+function hideTip(){ tipEl.classList.remove('show'); }
+</script>
+
+<script>
+/* =====================================================================
+   MOTOR DE CRONOGRAMA
+   Encadeia as etapas do processo a partir da data inicial do lote e do
+   lead time da receita, e deriva: etapa atual, previsão de envase,
+   ocupação do fermentador e fila de próximas cervejas por tanque.
+   ===================================================================== */
+
+/** Chave normalizada: maiúsculas, sem acento, sem espaço duplicado. */
+function key(s){
+  return norm(s).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+
+/** Duração de uma etapa em dias (aceita HORAS ou DIAS). */
+function paraDias(valor, unidade){
+  const v = num(valor);
+  if (v == null) return 0;
+  return key(unidade).startsWith('HORA') ? v / 24 : v;
+}
+
+/* ---------- Tabelas de apoio ---------- */
+function buildApoio(){
+  ETAPA_ORDEM = (DB.etapas || [])
+    .filter(r => norm(r['Etapa']))
+    .map(r => ({
+      etapa: key(r['Etapa']),
+      rotulo: norm(r['Etapa']),
+      ordem: num(r['Ordem']) ?? 99,
+      ocupa: key(r['Ocupa Tanque']) !== 'NAO',
+      dur:   num(r['Duracao Padrao']) ?? 0,
+      unid:  norm(r['Unidade']) || 'DIAS',
+      cor:   norm(r['Cor']),
+    }))
+    .sort((a,b) => a.ordem - b.ordem);
+
+  ETAPA_COR = {};
+  ETAPA_ORDEM.forEach((e, i) => {
+    ETAPA_COR[e.etapa] = /^#[0-9a-fA-F]{6}$/.test(e.cor)
+      ? e.cor : ETAPA_FALLBACK[i % ETAPA_FALLBACK.length];
+  });
+
+  CERVEJA = {};
+  (DB.cervejas || []).forEach(r => {
+    const c = key(r['Codigo']);
+    if (!c) return;
+    CERVEJA[c] = {
+      nome:   norm(r['Nome da Cerveja']),
+      estilo: norm(r['Estilo']),
+      abv:    num(r['ABV%']),
+      ibu:    num(r['IBU']),
+      cor:    /^#[0-9a-fA-F]{6}$/.test(norm(r['Cor'])) ? norm(r['Cor']) : '#d9a12b',
+    };
+  });
+
+  PARAM = {};
+  (DB.parametros || []).forEach(r => {
+    const p = key(r['Parametro']);
+    if (p) PARAM[p] = num(r['Valor']);
+  });
+}
+
+/** Receita de etapas de um código: [{etapa, dias, ocupa, rotulo}] na ordem do processo. */
+function receitaEtapas(codigo){
+  const cod = key(codigo);
+  const rec = {};
+  (DB.leadtime || []).forEach(r => {
+    if (key(r['Codigo']) !== cod) return;
+    const e = key(r['Etapa']);
+    if (e) rec[e] = paraDias(r['Lead Time'], r['Unidade']);
+  });
+  const temReceita = Object.keys(rec).length > 0;
+  return ETAPA_ORDEM
+    .filter(e => temReceita ? rec[e.etapa] !== undefined : true)
+    .map(e => ({
+      etapa: e.etapa,
+      rotulo: e.rotulo,
+      ocupa: e.ocupa,
+      dias: temReceita ? rec[e.etapa] : paraDias(e.dur, e.unid),
+    }))
+    .filter(e => e.dias > 0);
+}
+
+/** Monta LOTES com cronograma completo. */
+function buildLotes(){
+  const agora = new Date();
+  LOTES = (DB.producao || [])
+    .filter(r => norm(r['Lote']))
+    .map(r => {
+      const cod    = key(r['Codigo']);
+      const cerv   = CERVEJA[cod] || {};
+      const inicio = parseDate(r['Data Inicial']);
+      const etapas = receitaEtapas(cod);
+
+      // Encadeia as etapas a partir da data inicial
+      let cursor = inicio ? new Date(inicio) : null;
+      const cron = etapas.map(e => {
+        const ini = cursor ? new Date(cursor) : null;
+        const fim = cursor ? new Date(cursor.getTime() + e.dias * DIA_MS) : null;
+        if (cursor) cursor = new Date(fim);
+        return { ...e, ini, fim };
+      });
+
+      const totalDias = cron.reduce((s, e) => s + e.dias, 0);
+      const fim       = cron.length && cron[cron.length-1].fim ? cron[cron.length-1].fim : null;
+      const ocupa     = cron.filter(e => e.ocupa);
+      const tanqueIni = ocupa.length ? ocupa[0].ini : inicio;
+      const tanqueFim = ocupa.length ? ocupa[ocupa.length-1].fim : fim;
+
+      // Etapa atual e progresso
+      let etapaAtual = null, progresso = 0;
+      if (inicio && fim){
+        if (agora < inicio)      { etapaAtual = null; progresso = 0; }
+        else if (agora >= fim)   { etapaAtual = null; progresso = 1; }
+        else {
+          etapaAtual = cron.find(e => e.ini && e.fim && agora >= e.ini && agora < e.fim) || null;
+          progresso  = (agora - inicio) / (fim - inicio);
+        }
+      }
+
+      const statusRaw = key(r['Status']) || 'PLANEJADO';
+      const concluido = statusRaw === 'CONCLUIDO' || (fim && agora >= fim && statusRaw !== 'CANCELADO');
+
+      return {
+        _row: r._row, raw: r,
+        lote:   norm(r['Lote']),
+        codigo: norm(r['Codigo']),
+        nome:   norm(r['Nome da Cerveja']) || cerv.nome || '—',
+        estilo: norm(r['Estilo']) || cerv.estilo || '',
+        abv:    num(r['ABV%']) ?? cerv.abv,
+        tanque: key(r['Tanque']),
+        volume: num(r['Volume (L)']) ?? 0,
+        inicio, fim, cron, totalDias, tanqueIni, tanqueFim,
+        etapaAtual, progresso,
+        status: statusRaw,
+        cancelado: statusRaw === 'CANCELADO',
+        concluido,
+        cor: cerv.cor || '#d9a12b',
+        rotulo: norm(r['Rotulo']),
+        material: norm(r['Material Divulgacao']),
+        finalReal: parseDate(r['Data Final Real']),
+        obs: norm(r['Observacoes']),
+        diasRestantes: fim ? Math.max(0, Math.ceil((fim - agora) / DIA_MS)) : null,
+      };
+    })
+    .sort((a,b) => (a.inicio?.getTime() || 0) - (b.inicio?.getTime() || 0));
+}
+
+/** Estado de cada fermentador: lote ocupando hoje + fila das próximas. */
+function estadoTanques(){
+  const agora = new Date();
+  const tanques = (DB.tanques || [])
+    .filter(t => norm(t['Tanque']))
+    .map(t => ({
+      tanque: key(t['Tanque']),
+      rotulo: norm(t['Tanque']),
+      capacidade: num(t['Capacidade (L)']) ?? 0,
+      tipo: norm(t['Tipo']),
+      local: norm(t['Local']),
+      status: key(t['Status']) || 'ATIVO',
+      atual: null, fila: [],
+    }));
+  const idx = {};
+  tanques.forEach(t => idx[t.tanque] = t);
+
+  LOTES.forEach(l => {
+    if (l.cancelado || !l.tanque) return;
+    const t = idx[l.tanque];
+    if (!t) return;
+    const ini = l.tanqueIni, fim = l.tanqueFim;
+    if (ini && fim && agora >= ini && agora < fim) t.atual = l;
+    else if (ini && agora < ini)                    t.fila.push(l);
+  });
+  tanques.forEach(t => t.fila.sort((a,b) => a.tanqueIni - b.tanqueIni));
+  return tanques;
+}
+
+/** Custo de insumos por código: {codigo: {total, porLitro, itens[]}} */
+function custosPorCerveja(){
+  const out = {};
+  (DB.insumos || []).forEach(r => {
+    const c = key(r['Codigo']);
+    if (!c) return;
+    const q  = n0(r['Quantidade']);
+    const cu = n0(r['Custo Unitario']);
+    (out[c] = out[c] || { total:0, itens:[] });
+    out[c].total += q * cu;
+    out[c].itens.push({
+      insumo: norm(r['Insumo']), classe: norm(r['Classificacao']),
+      qtd:q, unid:norm(r['Unidade']), custoUnit:cu, custo:q*cu, _row:r._row,
+    });
+  });
+  // volume de referência = maior volume já usado para esse código na produção
+  const volRef = {};
+  LOTES.forEach(l => {
+    const c = key(l.codigo);
+    if (l.volume > 0) volRef[c] = Math.max(volRef[c] || 0, l.volume);
+  });
+  Object.keys(out).forEach(c => {
+    const v = volRef[c] || 0;
+    out[c].volume = v;
+    out[c].porLitro = v > 0 ? out[c].total / v : null;
+  });
+  return out;
+}
+
+/** Valores de uma coluna da aba Listas (usada nos selects). */
+function lista(coluna){
+  return (DB.listas || []).map(r => norm(r[coluna])).filter(v => v);
+}
+</script>
+
+<script>
+/* =====================================================================
+   VISÃO 1 — FERMENTADORES (desenho) e VISÃO 2 — TIMELINE
+   ===================================================================== */
+
+/** Desenho do unitank. ratio 0..1 = volume do lote / capacidade do tanque. */
+function tankSVG(id, ratio, cor, vazio){
+  const TOPO = 50, FUNDO = 148;                    // faixa útil do corpo cilíndrico
+  const r = Math.max(0, Math.min(1, ratio || 0));
+  const nivel = FUNDO - r * (FUNDO - TOPO);
+  const claro = shade(cor, 46), escuro = shade(cor, -34);
+  const liquido = vazio ? '' : `
+    <g clip-path="url(#ci${id})">
+      <rect x="25" y="${nivel}" width="74" height="${196 - nivel}" fill="url(#lg${id})"/>
+      <ellipse cx="62" cy="${nivel}" rx="37" ry="6.5" fill="${claro}" opacity=".95"/>
+    </g>`;
+  return `
+<svg class="tank-svg" width="118" height="200" viewBox="0 0 124 214" role="img"
+     aria-label="Fermentador ${vazio ? 'vazio' : Math.round(r*100) + '% cheio'}">
+  <defs>
+    <clipPath id="ci${id}"><path d="M25,44 L25,148 L62,195 L99,148 L99,44 Z"/></clipPath>
+    <linearGradient id="lg${id}" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="${escuro}"/><stop offset=".38" stop-color="${cor}"/>
+      <stop offset=".72" stop-color="${claro}"/><stop offset="1" stop-color="${escuro}"/>
+    </linearGradient>
+  </defs>
+  <!-- pernas -->
+  <path d="M33,152 L25,206 M62,196 L62,208 M91,152 L99,206" stroke="#39456b" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <rect x="18" y="204" width="16" height="5" rx="2.5" fill="#39456b"/>
+  <rect x="90" y="204" width="16" height="5" rx="2.5" fill="#39456b"/>
+  <!-- corpo -->
+  <path d="M25,44 L25,148 L62,195 L99,148 L99,44 Z" fill="#1b2440"/>
+  ${liquido}
+  <path d="M25,44 L25,148 L62,195 L99,148 L99,44 Z" fill="none" stroke="#48557f" stroke-width="2.5"/>
+  <!-- brilho metálico -->
+  <path d="M34,46 L34,150 L40,158 L40,46 Z" fill="#ffffff" opacity=".10"/>
+  <path d="M86,46 L86,150 L90,146 L90,46 Z" fill="#ffffff" opacity=".05"/>
+  <!-- tampo -->
+  <ellipse cx="62" cy="44" rx="37" ry="8.5" fill="#2b3760" stroke="#48557f" stroke-width="2.5"/>
+  <rect x="52" y="26" width="20" height="16" rx="4" fill="#2b3760" stroke="#48557f" stroke-width="2"/>
+  <circle cx="62" cy="24" r="4" fill="#48557f"/>
+  <!-- válvulas -->
+  <circle cx="99" cy="112" r="4.5" fill="#2b3760" stroke="#48557f" stroke-width="2"/>
+  <rect x="56" y="195" width="12" height="9" rx="2" fill="#2b3760" stroke="#48557f" stroke-width="2"/>
+</svg>`;
+}
+
+function pillEtapa(etapa){
+  if (!etapa) return '';
+  const c = ETAPA_COR[etapa.etapa] || '#8f9ac0';
+  return `<span class="stage-pill"><span class="stage-dot" style="background:${c}"></span>${esc(etapa.rotulo)}</span>`;
+}
+
+function renderTanques(){
+  const tanques = estadoTanques();
+  const agora = new Date();
+
+  /* --- KPIs --- */
+  const ocupados = tanques.filter(t => t.atual).length;
+  const capTotal = tanques.reduce((s,t) => s + t.capacidade, 0);
+  const litros   = tanques.reduce((s,t) => s + (t.atual ? t.atual.volume : 0), 0);
+  const emProd   = LOTES.filter(l => !l.cancelado && l.inicio && l.fim && agora >= l.inicio && agora < l.fim).length;
+  const proximos = LOTES.filter(l => !l.cancelado && l.fim && l.fim >= agora).sort((a,b) => a.fim - b.fim);
+  const prox     = proximos[0];
+  const ocupPct  = capTotal ? (litros / capTotal) * 100 : 0;
+
+  document.getElementById('kpiTanques').innerHTML = [
+    kpi('Tanques ocupados', `${ocupados} <span style="font-size:14px;color:var(--txt3)">/ ${tanques.length}</span>`,
+        ocupados === tanques.length ? 'warn' : '', `${tanques.length - ocupados} livre(s) agora`),
+    kpi('Volume em processo', fmtNum(litros) + ' L', '', `${fmtPct(ocupPct)} da capacidade instalada`),
+    kpi('Lotes em produção', String(emProd), '', `${LOTES.filter(l => l.status === 'PLANEJADO').length} planejado(s)`),
+    kpi('Próximo envase', prox ? fmtDate(prox.fim) : '—', 'pos',
+        prox ? `${esc(prox.nome)} · ${esc(prox.lote)}` : 'nenhum lote em andamento'),
+    kpi('Capacidade instalada', fmtNum(capTotal) + ' L', '', `${tanques.length} fermentadores`),
+  ].join('');
+
+  /* --- Cards --- */
+  document.getElementById('tanks').innerHTML = tanques.map((t, i) => {
+    const l = t.atual;
+    const ratio = l && t.capacidade ? l.volume / t.capacidade : 0;
+    const cor = l ? l.cor : '#2b3760';
+    const fila = t.fila.slice(0, 3).map(f => `
+      <div class="chip">
+        <span class="sw" style="background:${f.cor}"></span>
+        <span>${esc(f.nome)}</span>
+        <span class="dt">${fmtDateShort(f.tanqueIni)}</span>
+      </div>`).join('');
+
+    if (!l){
+      const prox = t.fila[0];
+      return `<div class="tank-card free">
+        <div class="tank-top"><span class="tank-name">${esc(t.rotulo)}</span>
+          <span class="tank-cap">${fmtNum(t.capacidade)} L</span></div>
+        ${tankSVG('t'+i, 0, cor, true)}
+        <div class="tank-beer" style="color:var(--txt2)">Tanque livre</div>
+        <div class="tank-meta">${esc(t.tipo || '—')}${t.local ? ' · ' + esc(t.local) : ''}</div>
+        <div class="tank-foot">${prox
+          ? `Próxima: <b>${esc(prox.nome)}</b> em ${fmtDate(prox.tanqueIni)}`
+          : 'Sem lote programado'}</div>
+        ${fila ? `<div class="queue"><div class="queue-lbl">Fila</div>${fila}</div>` : ''}
+      </div>`;
+    }
+
+    const pct = Math.round(l.progresso * 100);
+    return `<div class="tank-card">
+      <div class="tank-top"><span class="tank-name">${esc(t.rotulo)}</span>
+        <span class="tank-cap">${fmtNum(l.volume)} / ${fmtNum(t.capacidade)} L</span></div>
+      ${tankSVG('t'+i, ratio, cor, false)}
+      <div class="tank-beer">${esc(l.nome)}</div>
+      <div class="tank-meta">${esc(l.estilo)}${l.abv != null ? ' · ' + fmtNum(l.abv,1) + '% ABV' : ''} · ${esc(l.lote)}</div>
+      ${pillEtapa(l.etapaAtual)}
+      <div class="bar"><span style="width:${pct}%;background:${ETAPA_COR[l.etapaAtual?.etapa] || 'var(--accent)'}"></span></div>
+      <div class="tank-foot">Envase previsto <b>${fmtDate(l.fim)}</b> · faltam <b>${l.diasRestantes ?? '—'} d</b></div>
+      <div class="tank-foot">Libera o tanque em <b>${fmtDate(l.tanqueFim)}</b></div>
+      ${fila ? `<div class="queue"><div class="queue-lbl">Próximas neste tanque</div>${fila}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const leg = ETAPA_ORDEM.map(e =>
+    `<div class="legend-item"><span class="legend-sw" style="background:${ETAPA_COR[e.etapa]}"></span>${esc(e.rotulo)}</div>`
+  ).join('');
+  document.getElementById('legendEtapas').innerHTML = leg;
+  document.getElementById('legendEtapas2').innerHTML = leg;
+}
+
+/* ------------------------- TIMELINE ------------------------- */
+const MES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+function renderTimeline(){
+  const dias = Number(document.getElementById('tlRange').value) || 90;
+  const ppd  = Number(document.getElementById('tlZoom').value) || 16;
+  const ini  = addDias(hoje(), -10);
+  const fim  = addDias(ini, dias);
+  const W    = dias * ppd;
+  const x    = d => ((d - ini) / DIA_MS) * ppd;
+
+  /* cabeçalho: meses + grade */
+  let grade = '';
+  for (let i = 0; i <= dias; i++){
+    const d = addDias(ini, i);
+    const semana = d.getDay() === 1;
+    if (ppd >= 16 || semana)
+      grade += `<div class="tl-grid${semana ? ' week' : ''}" style="left:${i*ppd}px"></div>`;
+  }
+  let meses = '';
+  let cur = new Date(ini.getFullYear(), ini.getMonth(), 1);
+  while (cur < fim){
+    const prox = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+    const x0 = Math.max(0, x(cur)), x1 = Math.min(W, x(prox));
+    if (x1 - x0 > 26)
+      meses += `<div class="tl-month" style="left:${x0}px;width:${x1-x0}px">${MES[cur.getMonth()]} ${String(cur.getFullYear()).slice(2)}</div>`;
+    cur = prox;
+  }
+  const xh = x(hoje());
+  const hojeLinha = `<div class="tl-today" style="left:${xh}px"></div>`;
+
+  let html = `<div class="tl-row tl-head"><div class="tl-label">Fermentador</div>`
+           + `<div class="tl-track" style="width:${W}px">${grade}${meses}`
+           + `<div class="tl-today-lbl" style="left:${xh}px">HOJE</div>${hojeLinha}</div></div>`;
+
+  const tanques = estadoTanques();
+  const semTanque = LOTES.filter(l => !l.cancelado && !l.tanque);
+  const linhas = tanques.map(t => ({
+    rotulo: t.rotulo,
+    sub: `${fmtNum(t.capacidade)} L`,
+    lotes: LOTES.filter(l => !l.cancelado && l.tanque === t.tanque),
+  }));
+  if (semTanque.length) linhas.push({ rotulo:'Sem tanque', sub:'a alocar', lotes:semTanque });
+
+  linhas.forEach(linha => {
+    let barras = '';
+    linha.lotes.forEach(l => {
+      if (!l.inicio || !l.fim || l.fim < ini || l.inicio > fim) return;
+      const x0 = x(l.inicio), largura = Math.max(6, x(l.fim) - x0);
+      const segs = l.cron.map(e => {
+        const w = Math.max(2, ((e.fim - e.ini) / DIA_MS) * ppd);
+        const c = ETAPA_COR[e.etapa] || '#8f9ac0';
+        const rot = w >= 52 ? `<span style="color:${textOn(c)}">${esc(e.rotulo.slice(0,11))}</span>` : '';
+        return `<div class="tl-seg" style="width:${w}px;background:${c}"
+                  data-tip="${esc(l.lote)}|${esc(l.nome)}|${esc(e.rotulo)}|${fmtDate(e.ini)}|${fmtDate(e.fim)}|${e.dias}">${rot}</div>`;
+      }).join('');
+      barras += `<div class="tl-name" style="left:${Math.max(2, x0)}px">${esc(l.lote)} · ${esc(l.nome)}`
+             + `${l.status === 'PLANEJADO' ? ' · planejado' : ''}</div>`
+             + `<div class="tl-bar${l.status === 'PLANEJADO' ? ' planned' : ''}" style="left:${x0}px;width:${largura}px">${segs}</div>`;
+    });
+    html += `<div class="tl-row"><div class="tl-label">${esc(linha.rotulo)}<small>${esc(linha.sub)}</small></div>`
+          + `<div class="tl-track" style="width:${W}px">${grade}${barras}${hojeLinha}</div></div>`;
+  });
+
+  const el = document.getElementById('tl');
+  el.innerHTML = html;
+  el.querySelectorAll('.tl-seg[data-tip]').forEach(seg => {
+    seg.addEventListener('mousemove', ev => {
+      const [lote, nome, etapa, di, df, dd] = seg.dataset.tip.split('|');
+      showTip(ev, `<b>${lote} · ${nome}</b>`
+        + `<div>${etapa}</div>`
+        + `<div class="r">${di} → ${df}</div>`
+        + `<div class="r">${Number(dd) < 1 ? Math.round(Number(dd)*24) + ' h' : fmtNum(Number(dd),1) + ' dias'}</div>`);
+    });
+    seg.addEventListener('mouseleave', hideTip);
+  });
+}
+</script>
+
+<script>
+/* =====================================================================
+   VISÃO 3 — PRODUÇÃO   |   VISÃO 4 — RECEITAS & CUSTOS
+   ===================================================================== */
+
+function badgeStatus(s){
+  const m = { 'EM PRODUCAO':'info', 'PLANEJADO':'mute', 'CONCLUIDO':'ok', 'CANCELADO':'err' };
+  return `<span class="badge ${m[s] || 'mute'}">${esc(s || '—')}</span>`;
+}
+function badgeAprov(v){
+  const k = key(v);
+  if (!k) return '<span class="badge mute">—</span>';
+  const cls = k === 'APROVADO' ? 'ok' : (k === 'PENDENTE' ? 'warn' : 'mute');
+  return `<span class="badge ${cls}">${esc(v)}</span>`;
+}
+
+function preencherFiltros(){
+  const st = document.getElementById('fStatus'), tq = document.getElementById('fTanque');
+  const vSt = st.value, vTq = tq.value;
+  const status = [...new Set(LOTES.map(l => l.status))].sort();
+  const tanks  = [...new Set(LOTES.map(l => l.tanque).filter(t => t))].sort();
+  st.innerHTML = '<option value="">Todos</option>' + status.map(s => `<option>${esc(s)}</option>`).join('');
+  tq.innerHTML = '<option value="">Todos</option>' + tanks.map(s => `<option>${esc(s)}</option>`).join('');
+  st.value = vSt; tq.value = vTq;
+}
+
+const COLS_TBL_PROD = ['Lote','Cerveja','Estilo','Tanque','Volume','Início','Etapa atual',
+  'Progresso','Envase previsto','Libera tanque','Status','Rótulo','Divulgação'];
+
+function renderProducao(){
+  const agora = new Date();
+  const fSt = document.getElementById('fStatus').value;
+  const fTq = document.getElementById('fTanque').value;
+  const fBs = key(document.getElementById('fBusca').value);
+
+  const rows = LOTES.filter(l =>
+    (!fSt || l.status === fSt) &&
+    (!fTq || l.tanque === fTq) &&
+    (!fBs || key(`${l.lote} ${l.nome} ${l.estilo} ${l.codigo}`).includes(fBs))
+  ).slice().reverse();
+
+  const em30 = LOTES.filter(l => !l.cancelado && l.fim && l.fim >= agora && l.fim <= addDias(agora,30));
+  document.getElementById('kpiProducao').innerHTML = [
+    kpi('Lotes cadastrados', String(LOTES.length), '', `${LOTES.filter(l=>l.cancelado).length} cancelado(s)`),
+    kpi('Em produção', String(LOTES.filter(l => !l.cancelado && l.inicio && l.fim && agora>=l.inicio && agora<l.fim).length)),
+    kpi('Planejados', String(LOTES.filter(l => l.status==='PLANEJADO').length)),
+    kpi('Envase nos próx. 30 dias', fmtNum(em30.reduce((s,l)=>s+l.volume,0)) + ' L', 'pos', `${em30.length} lote(s)`),
+    kpi('Pendências de rótulo', String(LOTES.filter(l => key(l.rotulo)==='PENDENTE' || key(l.material)==='PENDENTE').length),
+        LOTES.some(l => key(l.rotulo)==='PENDENTE') ? 'warn' : '', 'rótulo ou material'),
+  ].join('');
+
+  const editando = !!accessToken;
+  document.getElementById('thProducao').innerHTML =
+    COLS_TBL_PROD.map(c => `<th${['Volume','Progresso'].includes(c) ? ' class="num"' : ''}>${c}</th>`).join('')
+    + (editando ? '<th></th>' : '');
+
+  const tb = document.querySelector('#tblProducao tbody');
+  if (!rows.length){
+    tb.innerHTML = `<tr><td class="empty" colspan="${COLS_TBL_PROD.length+1}">Nenhum lote encontrado.</td></tr>`;
+  } else {
+    tb.innerHTML = rows.map(l => {
+      const pct = Math.round(l.progresso * 100);
+      const cor = ETAPA_COR[l.etapaAtual?.etapa] || 'var(--txt3)';
+      return `<tr onclick="selecionarLote('${esc(l.lote)}')" style="cursor:pointer">
+        <td><b>${esc(l.lote)}</b></td>
+        <td>${esc(l.nome)}</td>
+        <td>${esc(l.estilo)}</td>
+        <td>${esc(l.tanque || '—')}</td>
+        <td class="num">${fmtNum(l.volume)}</td>
+        <td>${fmtDate(l.inicio)}</td>
+        <td>${l.etapaAtual
+              ? `<span class="stage-dot" style="display:inline-block;background:${cor};margin-right:6px"></span>${esc(l.etapaAtual.rotulo)}`
+              : (l.concluido ? '<span class="badge ok">Finalizado</span>' : '<span class="badge mute">Não iniciado</span>')}</td>
+        <td class="num">${pct}%</td>
+        <td>${fmtDate(l.fim)}</td>
+        <td>${fmtDate(l.tanqueFim)}</td>
+        <td>${badgeStatus(l.status)}</td>
+        <td>${badgeAprov(l.rotulo)}</td>
+        <td>${badgeAprov(l.material)}</td>
+        ${editando ? `<td><button class="btn icon-btn" title="Editar lote"
+            onclick="event.stopPropagation();openLoteModal(${l._row})">✏️</button></td>` : ''}
+      </tr>`;
+    }).join('');
+  }
+  renderCronograma();
+}
+
+function selecionarLote(lote){ loteSelecionado = lote; renderCronograma(); }
+
+function renderCronograma(){
+  const l = LOTES.find(x => x.lote === loteSelecionado)
+         || LOTES.filter(x => !x.cancelado && x.etapaAtual)[0]
+         || LOTES[LOTES.length-1];
+  const th = document.getElementById('thCron');
+  const tb = document.querySelector('#tblCronograma tbody');
+  if (!l){ th.innerHTML = ''; tb.innerHTML = '<tr><td class="empty">Sem lotes.</td></tr>'; return; }
+
+  th.innerHTML = ['Etapa','Início','Fim','Duração','Ocupa tanque','Situação']
+    .map(c => `<th>${c}</th>`).join('');
+  const agora = new Date();
+  tb.innerHTML = l.cron.map(e => {
+    const cor = ETAPA_COR[e.etapa] || 'var(--txt3)';
+    let sit = '<span class="badge mute">A fazer</span>';
+    if (e.ini && e.fim){
+      if (agora >= e.fim) sit = '<span class="badge ok">Concluída</span>';
+      else if (agora >= e.ini) sit = '<span class="badge info">Em andamento</span>';
+    }
+    return `<tr>
+      <td><span class="stage-dot" style="display:inline-block;background:${cor};margin-right:6px"></span>${esc(e.rotulo)}</td>
+      <td>${fmtDate(e.ini)}</td><td>${fmtDate(e.fim)}</td>
+      <td>${e.dias < 1 ? Math.round(e.dias*24) + ' h' : fmtNum(e.dias,1) + ' dias'}</td>
+      <td>${e.ocupa ? 'Sim' : 'Não'}</td><td>${sit}</td></tr>`;
+  }).join('')
+  + `<tr class="total"><td>${esc(l.lote)} · ${esc(l.nome)}</td><td>${fmtDate(l.inicio)}</td>`
+  + `<td>${fmtDate(l.fim)}</td><td>${fmtNum(l.totalDias,1)} dias</td><td colspan="2">`
+  + `Tanque ${esc(l.tanque || '—')} ocupado de ${fmtDate(l.tanqueIni)} a ${fmtDate(l.tanqueFim)}</td></tr>`;
+}
+
+/* ------------------------- RECEITAS & CUSTOS ------------------------- */
+function renderReceitas(){
+  const custos = custosPorCerveja();
+  const precoL = PARAM['PRECO MEDIO LITRO'] || 0;
+  const codigos = [...new Set([
+    ...Object.keys(CERVEJA),
+    ...(DB.leadtime || []).map(r => key(r['Codigo'])).filter(c => c),
+  ])].sort();
+
+  /* KPIs */
+  const leads = codigos.map(c => receitaEtapas(c).reduce((s,e)=>s+e.dias,0)).filter(v => v>0);
+  const cpl   = codigos.map(c => custos[c]?.porLitro).filter(v => v != null);
+  const mediaLead = leads.length ? leads.reduce((a,b)=>a+b,0)/leads.length : null;
+  const mediaCpl  = cpl.length ? cpl.reduce((a,b)=>a+b,0)/cpl.length : null;
+  document.getElementById('kpiReceitas').innerHTML = [
+    kpi('Cervejas cadastradas', String(codigos.length)),
+    kpi('Lead time médio', mediaLead ? fmtNum(mediaLead,1) + ' dias' : '—', '', 'da brassagem ao envase'),
+    kpi('Custo médio de insumos', mediaCpl != null ? fmtBRL(mediaCpl) + '/L' : '—', '', 'malte, lúpulo, levedura'),
+    kpi('Preço médio de venda', precoL ? fmtBRL(precoL) + '/L' : '—', '', 'aba Fin_Parametros'),
+    kpi('Margem sobre insumos', (mediaCpl != null && precoL)
+        ? fmtPct((precoL - mediaCpl) / precoL * 100) : '—', 'pos',
+        'não inclui embalagem, mão de obra nem impostos'),
+  ].join('');
+
+  /* Lead time — pivot: uma linha por cerveja, uma coluna por etapa */
+  document.getElementById('thLead').innerHTML =
+    `<th>Cerveja</th>` + ETAPA_ORDEM.map(e =>
+      `<th class="num" title="${esc(e.rotulo)}">${esc(e.rotulo.slice(0,5))}</th>`).join('')
+    + `<th class="num">Total</th>`;
+  document.querySelector('#tblLead tbody').innerHTML = codigos.map(c => {
+    const rec = {}; receitaEtapas(c).forEach(e => rec[e.etapa] = e.dias);
+    const tot = Object.values(rec).reduce((a,b)=>a+b,0);
+    const cv = CERVEJA[c] || {};
+    return `<tr><td><b>${esc(cv.nome || c)}</b><br><span style="color:var(--txt3)">${esc(c)}</span></td>`
+      + ETAPA_ORDEM.map(e => {
+          const v = rec[e.etapa];
+          return `<td class="num">${v == null ? '<span style="color:var(--txt3)">—</span>'
+            : (v < 1 ? Math.round(v*24) + 'h' : fmtNum(v,0) + 'd')}</td>`;
+        }).join('')
+      + `<td class="num"><b>${fmtNum(tot,1)} d</b></td></tr>`;
+  }).join('') || `<tr><td class="empty" colspan="9">Sem receitas cadastradas.</td></tr>`;
+
+  /* Custo por cerveja */
+  document.getElementById('thCusto').innerHTML =
+    ['Cerveja','Lote ref.','Insumos','Custo/L','Preço/L','Marg. insumos'].map((c,i) =>
+      `<th${i>=1?' class="num"':''}>${c}</th>`).join('');
+  document.querySelector('#tblCusto tbody').innerHTML = codigos.map(c => {
+    const k = custos[c]; const cv = CERVEJA[c] || {};
+    const pl = k?.porLitro;
+    const mg = (pl != null && precoL) ? (precoL - pl) / precoL * 100 : null;
+    return `<tr>
+      <td><b>${esc(cv.nome || c)}</b></td>
+      <td class="num">${k?.volume ? fmtNum(k.volume) + ' L' : '—'}</td>
+      <td class="num">${k ? fmtBRLc(k.total) : '—'}</td>
+      <td class="num">${pl != null ? fmtBRL(pl) : '—'}</td>
+      <td class="num">${precoL ? fmtBRL(precoL) : '—'}</td>
+      <td class="num">${mg == null ? '—'
+        : `<span class="badge ${mg >= 60 ? 'ok' : (mg >= 40 ? 'warn' : 'err')}">${fmtPct(mg)}</span>`}</td>
+    </tr>`;
+  }).join('') || `<tr><td class="empty" colspan="6">Sem insumos cadastrados.</td></tr>`;
+
+  /* Ficha técnica */
+  document.getElementById('thInsumos').innerHTML =
+    ['Código','Cerveja','Insumo','Classificação','Qtd','Unid.','Custo unit.','Custo total']
+    .map((c,i) => `<th${i>=4?' class="num"':''}>${c}</th>`).join('');
+  document.querySelector('#tblInsumos tbody').innerHTML = (DB.insumos || []).map(r => {
+    const c = key(r['Codigo']); const cv = CERVEJA[c] || {};
+    const q = n0(r['Quantidade']), cu = n0(r['Custo Unitario']);
+    return `<tr><td>${esc(r['Codigo'])}</td><td>${esc(cv.nome || r['Estilo'])}</td>
+      <td><b>${esc(r['Insumo'])}</b></td><td><span class="badge mute">${esc(r['Classificacao'])}</span></td>
+      <td class="num">${fmtNum(q, q % 1 ? 2 : 0)}</td><td class="num">${esc(r['Unidade'])}</td>
+      <td class="num">${fmtBRL(cu)}</td><td class="num">${fmtBRL(q*cu)}</td></tr>`;
+  }).join('') || `<tr><td class="empty" colspan="8">Sem insumos cadastrados.</td></tr>`;
+}
+</script>
+
+<script>
+/* =====================================================================
+   VISÃO 5 — FINANCEIRO
+   DRE gerencial por competência, fluxo de caixa por vencimento,
+   contas a pagar/receber e saldo de caixa.
+   ===================================================================== */
+
+const GRUPO_ORDEM = ['RECEITA BRUTA','DEDUCOES','CMV','DESPESAS OPERACIONAIS',
+  'DESPESAS COMERCIAIS','DESPESAS ADMINISTRATIVAS','DESPESAS FINANCEIRAS',
+  'RECEITAS FINANCEIRAS','INVESTIMENTOS'];
+
+function planoIndex(){
+  const idx = {};
+  (DB.plano || []).forEach(r => {
+    const c = key(r['Conta']);
+    if (c) idx[c] = { tipo: key(r['Tipo']), grupo: key(r['Grupo DRE']) || 'OUTROS' };
+  });
+  return idx;
+}
+
+function lancamentos(){
+  const idx = planoIndex();
+  return (DB.lancamentos || [])
+    .filter(r => norm(r['Conta']) || norm(r['Valor']))
+    .map(r => {
+      const conta = key(r['Conta']);
+      const p = idx[conta] || { tipo: key(r['Tipo']) === 'ENTRADA' ? 'RECEITA' : 'DESPESA', grupo:'OUTROS' };
+      const st = key(r['Status']);
+      const venc = parseDate(r['Vencimento']) || parseDate(r['Data']);
+      const pago = parseDate(r['Data Pagamento']);
+      return {
+        _row: r._row, raw: r,
+        data: parseDate(r['Data']),
+        tipo: key(r['Tipo']) || (p.tipo === 'RECEITA' ? 'ENTRADA' : 'SAIDA'),
+        conta: norm(r['Conta']), grupo: p.grupo, tipoConta: p.tipo,
+        centro: norm(r['Centro de Custo']), desc: norm(r['Descricao']),
+        valor: n0(r['Valor']), venc, pago, status: st,
+        liquidado: st === 'PAGO' || st === 'RECEBIDO' || !!pago,
+        cancelado: st === 'CANCELADO',
+        lote: norm(r['Lote']), doc: norm(r['Documento']),
+      };
+    })
+    .filter(l => !l.cancelado);
+}
+
+function somaGrupo(ls, grupo){ return ls.filter(l => l.grupo === grupo).reduce((s,l) => s + l.valor, 0); }
+
+function renderFinanceiro(){
+  const ls = lancamentos();
+  const agora = hoje();
+
+  /* ---------- DRE ---------- */
+  const receitaBruta = somaGrupo(ls,'RECEITA BRUTA');
+  const deducoes     = somaGrupo(ls,'DEDUCOES');
+  const receitaLiq   = receitaBruta - deducoes;
+  const cmv          = somaGrupo(ls,'CMV');
+  const lucroBruto   = receitaLiq - cmv;
+  const despOper     = somaGrupo(ls,'DESPESAS OPERACIONAIS');
+  const despCom      = somaGrupo(ls,'DESPESAS COMERCIAIS');
+  const despAdm      = somaGrupo(ls,'DESPESAS ADMINISTRATIVAS');
+  const ebitda       = lucroBruto - despOper - despCom - despAdm;
+  const recFin       = somaGrupo(ls,'RECEITAS FINANCEIRAS');
+  const despFin      = somaGrupo(ls,'DESPESAS FINANCEIRAS');
+  const resultado    = ebitda + recFin - despFin;
+  const invest       = somaGrupo(ls,'INVESTIMENTOS');
+  const pct = v => receitaLiq ? (v / receitaLiq) * 100 : null;
+
+  /* ---------- Caixa e contas em aberto ---------- */
+  const saldoIni = PARAM['SALDO INICIAL CAIXA'] || 0;
+  const recebido = ls.filter(l => l.tipo === 'ENTRADA' && l.liquidado).reduce((s,l) => s + l.valor, 0);
+  const pagoOut  = ls.filter(l => l.tipo === 'SAIDA'   && l.liquidado).reduce((s,l) => s + l.valor, 0);
+  const caixa    = saldoIni + recebido - pagoOut;
+
+  const aReceber = ls.filter(l => l.tipo === 'ENTRADA' && !l.liquidado);
+  const aPagar   = ls.filter(l => l.tipo === 'SAIDA'   && !l.liquidado);
+  const totRec   = aReceber.reduce((s,l) => s + l.valor, 0);
+  const totPag   = aPagar.reduce((s,l) => s + l.valor, 0);
+  const vencidos = [...aReceber, ...aPagar].filter(l => l.venc && l.venc < agora);
+  const capitalGiro = caixa + totRec - totPag;
+
+  document.getElementById('kpiFin1').innerHTML = [
+    kpi('Receita bruta', fmtBRLc(receitaBruta), 'pos', 'acumulado'),
+    kpi('Receita líquida', fmtBRLc(receitaLiq), '', `deduções ${fmtBRLc(deducoes)}`),
+    kpi('CMV', fmtBRLc(cmv), '', pct(cmv) != null ? `${fmtPct(pct(cmv))} da receita líquida` : ''),
+    kpi('Lucro bruto', fmtBRLc(lucroBruto), lucroBruto >= 0 ? 'pos' : 'neg',
+        pct(lucroBruto) != null ? `margem bruta ${fmtPct(pct(lucroBruto))}` : ''),
+    kpi('EBITDA', fmtBRLc(ebitda), ebitda >= 0 ? 'pos' : 'neg',
+        pct(ebitda) != null ? `margem ${fmtPct(pct(ebitda))}` : ''),
+  ].join('');
+
+  document.getElementById('kpiFin2').innerHTML = [
+    kpi('Resultado líquido', fmtBRLc(resultado), resultado >= 0 ? 'pos' : 'neg',
+        pct(resultado) != null ? `margem líquida ${fmtPct(pct(resultado))}` : ''),
+    kpi('Saldo em caixa', fmtBRLc(caixa), caixa >= 0 ? '' : 'neg', `saldo inicial ${fmtBRLc(saldoIni)}`),
+    kpi('Contas a receber', fmtBRLc(totRec), '', `${aReceber.length} título(s)`),
+    kpi('Contas a pagar', fmtBRLc(totPag), '', `${aPagar.length} título(s)`),
+    kpi('Títulos vencidos', String(vencidos.length), vencidos.length ? 'warn' : '',
+        fmtBRLc(vencidos.reduce((s,l) => s + l.valor, 0))),
+    kpi('Capital de giro', fmtBRLc(capitalGiro), capitalGiro >= 0 ? 'pos' : 'neg', 'caixa + a receber − a pagar'),
+  ].join('');
+
+  /* ---------- Tabela DRE ---------- */
+  const linha = (rot, val, cls, ind) =>
+    `<tr class="${cls||''}"><td style="padding-left:${ind ? 22 : 10}px">${rot}</td>`
+    + `<td class="num">${fmtBRL(val)}</td>`
+    + `<td class="num" style="color:var(--txt2)">${pct(val) != null ? fmtPct(pct(val)) : '—'}</td></tr>`;
+  document.querySelector('#tblDRE tbody').innerHTML = [
+    `<tr><th>Conta</th><th class="num">Valor</th><th class="num">% RL</th></tr>`,
+    linha('Receita bruta de vendas', receitaBruta),
+    linha('(−) Deduções e impostos', -deducoes, 'sub', true),
+    linha('= Receita líquida', receitaLiq, 'total'),
+    linha('(−) CMV — custo dos produtos vendidos', -cmv, 'sub', true),
+    linha('= Lucro bruto', lucroBruto, 'total'),
+    linha('(−) Despesas operacionais', -despOper, 'sub', true),
+    linha('(−) Despesas comerciais', -despCom, 'sub', true),
+    linha('(−) Despesas administrativas', -despAdm, 'sub', true),
+    linha('= EBITDA', ebitda, 'total'),
+    linha('(+) Receitas financeiras', recFin, 'sub', true),
+    linha('(−) Despesas financeiras', -despFin, 'sub', true),
+    linha('= Resultado líquido do exercício', resultado, 'total'),
+    invest ? linha('Investimentos (fora do DRE)', -invest, 'sub', true) : '',
+  ].join('');
+
+  /* ---------- Fluxo de caixa mensal ---------- */
+  const meses = {};
+  ls.forEach(l => {
+    if (!l.venc) return;
+    const k = `${l.venc.getFullYear()}-${String(l.venc.getMonth()+1).padStart(2,'0')}`;
+    (meses[k] = meses[k] || { e:0, s:0 });
+    if (l.tipo === 'ENTRADA') meses[k].e += l.valor; else meses[k].s += l.valor;
+  });
+  const chaves = Object.keys(meses).sort().slice(-8);
+  const maxV = Math.max(1, ...chaves.map(k => Math.max(meses[k].e, meses[k].s)));
+  document.getElementById('chartFluxo').innerHTML = chaves.map(k => {
+    const m = meses[k], [a, mm] = k.split('-');
+    const he = Math.max(2, (m.e / maxV) * 142), hs = Math.max(2, (m.s / maxV) * 142);
+    return `<div class="chart-col">
+      <div class="chart-pair">
+        <div class="chart-bar" style="height:${he}px;background:var(--serie-entrada)"
+             data-tip="Entradas|${MES[+mm-1]}/${a}|${fmtBRL(m.e)}"></div>
+        <div class="chart-bar" style="height:${hs}px;background:var(--serie-saida)"
+             data-tip="Saídas|${MES[+mm-1]}/${a}|${fmtBRL(m.s)}"></div>
+      </div>
+      <div class="chart-x">${MES[+mm-1]}/${String(a).slice(2)}</div>
+    </div>`;
+  }).join('') || '<div class="chart-x" style="margin:auto">Sem lançamentos.</div>';
+  if (chaves.length)
+    document.getElementById('chartFluxo').insertAdjacentHTML('afterbegin',
+      `<div class="chart-max">máx. ${fmtBRLc(maxV)}</div>`);
+  document.querySelectorAll('#chartFluxo .chart-bar[data-tip]').forEach(b => {
+    b.addEventListener('mousemove', ev => {
+      const [serie, mes, val] = b.dataset.tip.split('|');
+      showTip(ev, `<b>${serie}</b><div class="r">${mes}</div><div>${val}</div>`);
+    });
+    b.addEventListener('mouseleave', hideTip);
+  });
+
+  /* ---------- Contas a receber / a pagar ---------- */
+  const tabelaAberto = (elHead, elBody, arr, rotulo) => {
+    document.getElementById(elHead).innerHTML =
+      ['Vencimento','Descrição','Conta','Valor','Situação'].map((c,i) =>
+        `<th${i===3?' class="num"':''}>${c}</th>`).join('');
+    const body = document.querySelector(`#${elBody} tbody`);
+    const rows = arr.slice().sort((a,b) => (a.venc||0) - (b.venc||0));
+    body.innerHTML = rows.map(l => {
+      const atraso = l.venc ? diffDias(l.venc, agora) : 0;
+      const sit = !l.venc ? '<span class="badge mute">sem data</span>'
+        : atraso > 0 ? `<span class="badge err">${atraso}d em atraso</span>`
+        : `<span class="badge ${atraso > -7 ? 'warn' : 'info'}">em ${Math.abs(atraso)}d</span>`;
+      return `<tr><td>${fmtDate(l.venc)}</td><td>${esc(l.desc || '—')}</td>
+        <td style="color:var(--txt2)">${esc(l.conta)}</td>
+        <td class="num">${fmtBRL(l.valor)}</td><td>${sit}</td></tr>`;
+    }).join('') || `<tr><td class="empty" colspan="5">Nada ${rotulo}.</td></tr>`;
+  };
+  tabelaAberto('thAR','tblAR', aReceber, 'a receber');
+  tabelaAberto('thAP','tblAP', aPagar, 'a pagar');
+
+  /* ---------- Lançamentos ---------- */
+  const editando = !!accessToken;
+  document.getElementById('thLanc').innerHTML =
+    ['Data','Tipo','Conta','Centro de custo','Descrição','Valor','Vencimento','Status','Lote','Doc.']
+    .map((c,i) => `<th${i===5?' class="num"':''}>${c}</th>`).join('') + (editando ? '<th></th>' : '');
+  document.querySelector('#tblLanc tbody').innerHTML = ls.slice().sort((a,b) => (b.data||0)-(a.data||0))
+    .map(l => `<tr>
+      <td>${fmtDate(l.data)}</td>
+      <td><span class="badge ${l.tipo === 'ENTRADA' ? 'ok' : 'mute'}">${esc(l.tipo)}</span></td>
+      <td>${esc(l.conta)}</td><td style="color:var(--txt2)">${esc(l.centro)}</td>
+      <td>${esc(l.desc)}</td>
+      <td class="num" style="color:${l.tipo === 'ENTRADA' ? 'var(--green)' : 'var(--txt)'}">${fmtBRL(l.valor)}</td>
+      <td>${fmtDate(l.venc)}</td>
+      <td><span class="badge ${l.liquidado ? 'ok' : (l.venc && l.venc < agora ? 'err' : 'warn')}">${esc(l.status || '—')}</span></td>
+      <td>${esc(l.lote)}</td><td style="color:var(--txt2)">${esc(l.doc)}</td>
+      ${editando ? `<td><button class="btn icon-btn" title="Editar lançamento"
+          onclick="openLancModal(${l._row})">✏️</button></td>` : ''}
+    </tr>`).join('') || `<tr><td class="empty" colspan="11">Sem lançamentos.</td></tr>`;
+}
+</script>
+
+<script>
+/* =====================================================================
+   FORMULÁRIOS, AUTENTICAÇÃO E CARGA
+   Tudo que grava passa por `accessToken`; a visibilidade de todo
+   elemento de edição sai de um único ponto (applyEditingUI).
+   ===================================================================== */
+
+/** Número no formato que a planilha pt-BR entende (vírgula decimal). */
+function numOut(v){
+  const s = norm(v);
+  if (!s) return '';
+  return s.replace('.', ',');
+}
+
+function campo(nome, tipo, valor, opcoes, wide){
+  const id = 'f_' + nome.replace(/[^A-Za-z0-9]/g,'_');
+  let ctrl;
+  if (tipo === 'select'){
+    const has = opcoes.some(o => key(o) === key(valor));
+    ctrl = `<select id="${id}" name="${esc(nome)}">`
+      + `<option value=""></option>`
+      + opcoes.map(o => `<option value="${esc(o)}"${key(o)===key(valor)?' selected':''}>${esc(o)}</option>`).join('')
+      + (valor && !has ? `<option value="${esc(valor)}" selected>${esc(valor)}</option>` : '')
+      + `</select>`;
+  } else {
+    ctrl = `<input id="${id}" name="${esc(nome)}" type="${tipo}" value="${esc(valor)}"`
+      + (tipo === 'number' ? ' step="any"' : '') + '>';
+  }
+  return `<div class="field-row${wide ? ' wide' : ''}"><label for="${id}">${esc(nome)}</label>${ctrl}</div>`;
+}
+
+function proximoLote(){
+  const ano = new Date().getFullYear();
+  const nums = LOTES.map(l => { const m = l.lote.match(/(\d+)\s*$/); return m ? +m[1] : 0; });
+  const n = Math.max(0, ...nums) + 1;
+  return `L${ano}-${String(n).padStart(3,'0')}`;
+}
+
+/* ------------------------- LOTE ------------------------- */
+function openLoteModal(row){
+  const r = row ? (DB.producao || []).find(x => x._row === row) : null;
+  const g = c => r ? norm(r[c]) : '';
+  const codigos = Object.keys(CERVEJA);
+  const tanques = (DB.tanques || []).map(t => norm(t['Tanque'])).filter(v => v);
+
+  document.getElementById('loteTitle').textContent = r ? `Editar lote ${g('Lote')}` : 'Novo lote';
+  document.getElementById('loteForm').dataset.row = row || '';
+  document.getElementById('loteForm').innerHTML = [
+    campo('Lote','text', r ? g('Lote') : proximoLote()),
+    campo('Codigo','select', g('Codigo'), codigos),
+    campo('Nome da Cerveja','text', g('Nome da Cerveja')),
+    campo('Estilo','text', g('Estilo')),
+    campo('ABV%','number', g('ABV%')),
+    campo('Tanque','select', g('Tanque'), tanques),
+    campo('Volume (L)','number', g('Volume (L)')),
+    campo('Data Inicial','date', r ? toISO(parseDate(g('Data Inicial'))) : toISO(hoje())),
+    campo('Status','select', r ? g('Status') : 'PLANEJADO', lista('Status Producao')),
+    campo('Rotulo','select', g('Rotulo'), lista('Aprovacao')),
+    campo('Material Divulgacao','select', g('Material Divulgacao'), lista('Aprovacao')),
+    campo('Data Final Real','date', toISO(parseDate(g('Data Final Real')))),
+    campo('Observacoes','text', g('Observacoes'), null, true),
+  ].join('');
+
+  // Ao escolher o código, preenche nome/estilo/ABV a partir do catálogo
+  const selCod = document.getElementById('f_Codigo');
+  selCod.addEventListener('change', () => {
+    const c = CERVEJA[key(selCod.value)];
+    if (!c) return;
+    document.getElementById('f_Nome_da_Cerveja').value = c.nome || '';
+    document.getElementById('f_Estilo').value = c.estilo || '';
+    if (c.abv != null) document.getElementById('f_ABV_').value = String(c.abv).replace('.', ',');
+  });
+
+  document.getElementById('loteOverlay').classList.add('open');
+}
+
+async function submitLote(){
+  if (!accessToken) return toast('Entre para editar antes de salvar.', false);
+  const form = document.getElementById('loteForm');
+  const row  = Number(form.dataset.row || 0);
+  const get  = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
+
+  if (!get('Lote')) return toast('Informe o número do lote.', false);
+  if (!get('Data Inicial')) return toast('Informe a data inicial.', false);
+
+  const values = COLS_PRODUCAO.map(c =>
+    ['ABV%','Volume (L)'].includes(c) ? numOut(get(c)) : get(c));
+
+  const btn = document.getElementById('loteSaveBtn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    if (row) await updateRow(TABS.producao.name, row, values);
+    else     await appendRow(TABS.producao.name, values);
+    toast(row ? 'Lote atualizado.' : 'Lote criado.', true);
+    closeModal('loteOverlay');
+    await refresh();
+  } catch (e){
+    toast('Erro ao salvar: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar';
+  }
+}
+
+/* ------------------------- LANÇAMENTO ------------------------- */
+function openLancModal(row){
+  const r = row ? (DB.lancamentos || []).find(x => x._row === row) : null;
+  const g = c => r ? norm(r[c]) : '';
+  const contas = (DB.plano || []).map(p => norm(p['Conta'])).filter(v => v);
+
+  document.getElementById('lancTitle').textContent = r ? 'Editar lançamento' : 'Novo lançamento';
+  document.getElementById('lancForm').dataset.row = row || '';
+  document.getElementById('lancForm').innerHTML = [
+    campo('Data','date', r ? toISO(parseDate(g('Data'))) : toISO(hoje())),
+    campo('Tipo','select', g('Tipo'), lista('Tipo Lancamento')),
+    campo('Conta','select', g('Conta'), contas, true),
+    campo('Centro de Custo','select', g('Centro de Custo'), lista('Centro de Custo')),
+    campo('Valor','number', g('Valor')),
+    campo('Descricao','text', g('Descricao'), null, true),
+    campo('Vencimento','date', r ? toISO(parseDate(g('Vencimento'))) : toISO(hoje())),
+    campo('Data Pagamento','date', toISO(parseDate(g('Data Pagamento')))),
+    campo('Status','select', r ? g('Status') : 'PENDENTE', lista('Status Financeiro')),
+    campo('Lote','select', g('Lote'), LOTES.map(l => l.lote)),
+    campo('Documento','text', g('Documento')),
+  ].join('');
+  document.getElementById('lancOverlay').classList.add('open');
+}
+
+async function submitLanc(){
+  if (!accessToken) return toast('Entre para editar antes de salvar.', false);
+  const form = document.getElementById('lancForm');
+  const row  = Number(form.dataset.row || 0);
+  const get  = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
+
+  if (!get('Conta')) return toast('Escolha a conta do plano de contas.', false);
+  if (!get('Valor')) return toast('Informe o valor.', false);
+
+  const values = COLS_LANC.map(c => c === 'Valor' ? numOut(get(c)) : get(c));
+  const btn = document.getElementById('lancSaveBtn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    if (row) await updateRow(TABS.lancamentos.name, row, values);
+    else     await appendRow(TABS.lancamentos.name, values);
+    toast(row ? 'Lançamento atualizado.' : 'Lançamento criado.', true);
+    closeModal('lancOverlay');
+    await refresh();
+  } catch (e){
+    toast('Erro ao salvar: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar';
+  }
+}
+
+/* ------------------------- AUTENTICAÇÃO ------------------------- */
+function applyEditingUI(){
+  const editando = !!accessToken;
+  const badge = document.getElementById('modeBadge');
+  badge.textContent = editando ? 'MODO EDIÇÃO' : 'SOMENTE LEITURA';
+  badge.className   = editando ? 'badge-edit' : 'badge-readonly';
+  document.getElementById('authBtn').textContent = editando ? 'Sair do modo edição' : 'Entrar para editar';
+  ['newLoteBtn','newLancBtn','sheetBtn'].forEach(id => {
+    document.getElementById(id).style.display = editando ? '' : 'none';
+  });
+  document.getElementById('sheetBtn').href =
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+}
+
+function initGis(){
+  if (typeof google === 'undefined' || !google.accounts){ setTimeout(initGis, 300); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: resp => {
+      if (resp.error){ toast('Não foi possível entrar: ' + resp.error, false); return; }
+      accessToken = resp.access_token;
+      applyEditingUI();
+      renderTudo();
+      toast('Modo edição ativado.', true);
+    },
+  });
+}
+
+function handleAuthClick(){
+  if (accessToken){
+    google.accounts.oauth2.revoke(accessToken, () => {});
+    accessToken = null;
+    applyEditingUI();
+    renderTudo();
+    toast('Modo edição desativado.', true);
+    return;
+  }
+  if (!tokenClient) return toast('Autenticação ainda carregando, tente de novo em 1s.', false);
+  tokenClient.requestAccessToken();
+}
+
+/* ------------------------- NAVEGAÇÃO ------------------------- */
+document.getElementById('nav').addEventListener('click', ev => {
+  const b = ev.target.closest('button[data-view]');
+  if (!b) return;
+  document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === b.dataset.view));
+  if (b.dataset.view === 'v-timeline') renderTimeline();
+});
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', ev => { if (ev.target === o) o.classList.remove('open'); });
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open'));
+});
+
+/* ------------------------- CARGA ------------------------- */
+function renderTudo(){
+  buildApoio();
+  buildLotes();
+  preencherFiltros();
+  renderTanques();
+  renderTimeline();
+  renderProducao();
+  renderReceitas();
+  renderFinanceiro();
+}
+
+async function refresh(){
+  const chaves = Object.keys(TABS);
+  try {
+    const res = await Promise.all(chaves.map(k => fetch(csvUrl(TABS[k].gid), { cache:'no-store' })));
+    for (let i = 0; i < chaves.length; i++){
+      if (!res[i].ok) throw new Error(`Não foi possível ler a aba ${TABS[chaves[i]].name}`);
+      DB[chaves[i]] = parseCSV(await res[i].text());
+    }
+    renderTudo();
+    document.getElementById('sourceLabel').textContent =
+      `${(DB.producao||[]).length} lotes · ${(DB.lancamentos||[]).length} lançamentos · `
+      + `atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
+    document.getElementById('statusDot').className = 'dot';
+    document.getElementById('statusText').textContent = 'conectado';
+  } catch (e){
+    console.error(e);
+    document.getElementById('statusDot').className = 'dot err';
+    document.getElementById('statusText').textContent = 'erro ao conectar';
+    document.getElementById('sourceLabel').textContent =
+      'Não foi possível ler a planilha. Confira se ela está compartilhada como "qualquer pessoa com o link".';
+  }
+}
+
+applyEditingUI();
+initGis();
+refresh();
+setInterval(refresh, 120000);
+</script>
+</body>
+</html>
