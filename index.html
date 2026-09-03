@@ -1011,6 +1011,19 @@ function perfilDoUsuario(email){
   return (DB.usuarios || []).find(r => key(r['Email']) === e) || null;
 }
 
+/** Só quem está como ADMIN na aba Usuarios gerencia acessos.
+    Se ninguém estiver marcado como ADMIN (planilha recém-criada), a tela
+    continua disponível a quem pode editar — senão o dono se tranca do lado
+    de fora. Isto é a camada visual; quem barra de verdade é a configuração
+    "Editores podem alterar as permissões" da própria planilha no Google.   */
+function ehAdmin(){
+  const temAlgumAdmin = (DB.usuarios || []).some(r =>
+    key(r['Perfil']) === 'ADMIN' && key(r['Ativo']) !== 'NAO');
+  if (!temAlgumAdmin) return true;
+  const u = perfilDoUsuario(usuarioEmail);
+  return !!u && key(u['Perfil']) === 'ADMIN' && key(u['Ativo']) !== 'NAO';
+}
+
 /** SIM/NAO da coluna "Ve Financeiro"; null quando a pessoa não está na lista. */
 function marcadoParaFinanceiro(email){
   const u = perfilDoUsuario(email);
@@ -2532,9 +2545,12 @@ function applyEditingUI(){
   badge.className   = (logado && podeEditar) ? 'badge-edit' : 'badge-readonly';
   document.getElementById('authBtn').textContent = logado ? 'Sair' : 'Entrar com Google';
 
-  ['newLoteBtn','acessosBtn','sheetBtn'].forEach(id => {
+  ['newLoteBtn','sheetBtn'].forEach(id => {
     document.getElementById(id).style.display = (logado && podeEditar) ? '' : 'none';
   });
+  // Gerenciar acessos é só do administrador.
+  document.getElementById('acessosBtn').style.display =
+    (logado && podeEditar && ehAdmin()) ? '' : 'none';
   // Lançar no financeiro só faz sentido para quem enxerga o financeiro.
   document.getElementById('newLancBtn').style.display =
     (logado && podeEditar && temFinanceiro) ? '' : 'none';
@@ -2573,7 +2589,6 @@ function initGis(){
       await verificarPermissaoEdicao();
       applyEditingUI();
       await refresh();
-      applyEditingUI();          // o botão de lançamento depende do financeiro
     },
   });
 }
@@ -2602,6 +2617,7 @@ function handleAuthClick(){
 let acTimer = null;
 
 function abrirAcessos(){
+  if (!ehAdmin()) return toast('Só o administrador gerencia os acessos.', false);
   document.getElementById('acessosOverlay').classList.add('open');
   document.getElementById('acFallback').style.display = '';   // saída de emergência sempre à mão
   if (tokenAcessos) return listarAcessos();
@@ -2912,6 +2928,7 @@ async function refresh(){
     await carregarFinanceiro();
 
     renderTudo();
+    applyEditingUI();      // financeiro e perfil de admin só se sabem depois da leitura
     document.body.classList.remove('locked');
     gateMsg('');
     document.getElementById('sourceLabel').textContent =
