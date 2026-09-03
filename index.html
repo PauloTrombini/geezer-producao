@@ -628,7 +628,7 @@
     </div>
     <label class="check"><input type="checkbox" id="acAvisar" checked> Avisar a pessoa por e-mail</label>
     <div class="modal-actions">
-      <a class="btn" id="acFallback" target="_blank" rel="noopener" style="display:none;text-decoration:none;">Abrir compartilhamento no Google</a>
+      <a class="btn" id="acFallback" target="_blank" rel="noopener" style="text-decoration:none;">Abrir compartilhamento no Google</a>
       <button type="button" class="btn" onclick="closeModal('acessosOverlay')">Fechar</button>
     </div>
   </div>
@@ -2276,28 +2276,64 @@ function handleAuthClick(){
    Isso exige um escopo maior que o do resto do painel, então ele só é
    pedido no momento em que esta janela é aberta — e nunca para quem
    apenas consulta os dados.                                            */
+let acTimer = null;
+
 function abrirAcessos(){
   document.getElementById('acessosOverlay').classList.add('open');
-  document.getElementById('acFallback').style.display = 'none';
+  document.getElementById('acFallback').style.display = '';   // saída de emergência sempre à mão
   if (tokenAcessos) return listarAcessos();
+  pedirPermissaoAcessos();
+}
+
+/* Pede o escopo extra do Drive. Três coisas podem dar errado — o Google
+   recusar, a pessoa fechar a janelinha, ou o navegador bloquear o pop-up —
+   e nenhuma delas pode deixar a tela pendurada em "pedindo permissão". */
+function pedirPermissaoAcessos(){
   document.getElementById('acessosLista').innerHTML =
-    '<p class="hint">Pedindo ao Google a permissão para gerenciar o compartilhamento…</p>';
-  const cli = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPE_ACESSOS,
-    callback: resp => {
-      if (resp.error){ falhaAcessos('O Google não liberou a permissão (' + resp.error + ').'); return; }
-      tokenAcessos = resp.access_token;
-      listarAcessos();
-    },
-  });
+    '<p class="hint">Pedindo ao Google a permissão para gerenciar o compartilhamento…<br>'
+    + 'Uma janelinha do Google deve abrir. Se não abriu, libere os pop-ups deste site.</p>';
+
+  clearTimeout(acTimer);
+  acTimer = setTimeout(() => falhaAcessos(
+    'O Google não respondeu. A janela de permissão pode ter sido fechada ou bloqueada pelo navegador.'
+  ), 60000);
+
+  let cli;
+  try {
+    cli = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE_ACESSOS,
+      prompt: 'consent',
+      callback: resp => {
+        clearTimeout(acTimer);
+        if (resp.error){ falhaAcessos('O Google não liberou a permissão (' + resp.error + ').'); return; }
+        tokenAcessos = resp.access_token;
+        listarAcessos();
+      },
+      error_callback: err => {
+        clearTimeout(acTimer);
+        const t = (err && err.type) || '';
+        falhaAcessos(
+          t === 'popup_closed'          ? 'A janela do Google foi fechada antes de conceder a permissão.'
+        : t === 'popup_failed_to_open'  ? 'O navegador bloqueou a janela do Google. Libere os pop-ups deste site e tente de novo.'
+        :                                 'Não foi possível obter a permissão do Google' + (t ? ' (' + t + ')' : '') + '.');
+      },
+    });
+  } catch(e){
+    clearTimeout(acTimer);
+    return falhaAcessos('Não foi possível iniciar o pedido de permissão: ' + e.message);
+  }
   cli.requestAccessToken();
 }
 
 function falhaAcessos(msg){
+  clearTimeout(acTimer);
   document.getElementById('acessosLista').innerHTML =
-    `<p class="hint" style="color:var(--red)">${esc(msg)}</p>`
-    + `<p class="hint">Você ainda consegue liberar acesso pela tela de compartilhamento da própria planilha.</p>`;
+    `<p class="hint" style="color:var(--red)"><b>${esc(msg)}</b></p>`
+  + `<p class="hint">Isso não trava nada: dá para liberar o acesso do mesmo jeito pela tela de `
+  + `compartilhamento da própria planilha — o botão está aqui embaixo. Basta digitar o e-mail lá, `
+  + `escolher <b>Editor</b> e enviar.</p>`
+  + `<p><button type="button" class="btn" onclick="pedirPermissaoAcessos()">Tentar de novo</button></p>`;
   document.getElementById('acFallback').style.display = '';
 }
 
@@ -2336,7 +2372,10 @@ async function adicionarAcesso(){
   const papel  = document.getElementById('acPapel').value;
   const avisar = document.getElementById('acAvisar').checked;
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Digite um e-mail válido.', false);
-  if (!tokenAcessos) return toast('Permissão do Google ainda não concedida.', false);
+  if (!tokenAcessos){
+    toast('Permissão do Google ainda não concedida — use "Abrir compartilhamento no Google".', false);
+    return falhaAcessos('A permissão para gerenciar o compartilhamento não foi concedida.');
+  }
 
   const btn = document.getElementById('acAddBtn');
   btn.disabled = true; btn.textContent = 'Liberando…';
