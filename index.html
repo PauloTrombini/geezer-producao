@@ -659,6 +659,7 @@
     <div class="modal-sub">Quem pode abrir este painel. <b>Editor</b> vê tudo e lança dados; <b>Leitor</b> só consulta.
       O <b>Financeiro</b> é uma planilha separada — só quem estiver marcado aqui recebe acesso a ela.</div>
     <div id="acessosLista"></div>
+    <div id="acLock"></div>
     <hr class="sep">
     <div class="add-row">
       <div class="field-row grow"><label for="acEmail">E-mail para liberar</label>
@@ -2726,11 +2727,69 @@ async function listarAcessos(){
     }).join('') : '<p class="hint">Só você tem acesso.</p>')
     + (finOk ? '' : '<p class="hint" style="color:var(--amber)">Não consegui ler o compartilhamento '
         + 'da planilha financeira — o controle de financeiro fica indisponível nesta janela.</p>');
+    mostrarTrava();
   } catch(e){
     falhaAcessos(e.status === 403
       ? 'Sua conta não tem permissão para gerenciar o compartilhamento desta planilha.'
       : 'Não foi possível ler a lista de acessos: ' + e.message);
   }
+}
+
+/* ---------- Trava de compartilhamento ----------
+   Por padrão o Google deixa qualquer Editor compartilhar o arquivo. Com a
+   trava ligada (writersCanShare = false), só o proprietário libera ou remove
+   gente — inclusive pela tela do próprio Google. É esta a barreira de verdade;
+   esconder o botão no painel é só conforto.                                  */
+async function estadoTrava(id){
+  const j = await apiGet(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=writersCanShare,capabilities(canShare)`,
+    tokenAcessos);
+  return j.writersCanShare !== false;     // true = editores ainda podem compartilhar
+}
+
+async function mostrarTrava(){
+  const box = document.getElementById('acLock');
+  box.innerHTML = '';
+  try {
+    const [pAberta, fAberta] = await Promise.all([
+      estadoTrava(SHEET_ID),
+      estadoTrava(SHEET_FIN).catch(() => null),
+    ]);
+    const aberta = pAberta || fAberta === true;
+    box.innerHTML = `<hr class="sep">
+      <div class="acesso-item">
+        <span class="acesso-mail">Só o proprietário pode compartilhar
+          <small>${aberta
+            ? 'hoje qualquer Editor consegue adicionar gente pelo Google'
+            : 'trancado nas duas planilhas'}</small></span>
+        <span class="badge ${aberta ? 'warn' : 'ok'}">${aberta ? 'destrancado' : 'trancado'}</span>
+        <button class="btn icon-btn" onclick="travarCompartilhamento(${aberta})">
+          ${aberta ? 'Trancar' : 'Destrancar'}</button>
+      </div>`;
+  } catch(e){
+    box.innerHTML = '';                  // sem permissão para ler: não mostra o controle
+  }
+}
+
+async function travarCompartilhamento(trancar){
+  const box = document.getElementById('acLock');
+  box.innerHTML = '<p class="hint">Aplicando…</p>';
+  const alvo = { writersCanShare: !trancar };
+  try {
+    for (const id of [SHEET_ID, SHEET_FIN]){
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true`,
+        { method:'PATCH',
+          headers:{ Authorization:`Bearer ${tokenAcessos}`, 'Content-Type':'application/json' },
+          body: JSON.stringify(alvo) });
+      if (!r.ok) throw new Error(await mensagemErro(r));
+    }
+    toast(trancar
+      ? 'Pronto: agora só você libera ou remove acessos.'
+      : 'Editores voltaram a poder compartilhar as planilhas.', true);
+  } catch(e){
+    toast('Não foi possível alterar: ' + e.message, false);
+  }
+  mostrarTrava();
 }
 
 async function adicionarAcesso(){
