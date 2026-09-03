@@ -437,8 +437,13 @@
       <select id="fStatus" onchange="renderProducao()"><option value="">Todos</option></select>
       <label for="fTanque">Tanque</label>
       <select id="fTanque" onchange="renderProducao()"><option value="">Todos</option></select>
+      <label for="fAno">Ano</label>
+      <select id="fAno" onchange="renderProducao()"><option value="">Todos</option></select>
+      <label for="fMes">Mês</label>
+      <select id="fMes" onchange="renderProducao()"><option value="">Todos</option></select>
       <label for="fBusca">Busca</label>
       <input type="text" id="fBusca" placeholder="lote, cerveja, estilo…" oninput="renderProducao()">
+      <button class="btn" onclick="limparFiltrosProd()">Limpar</button>
     </div>
     <div class="panel">
       <h2>Lotes</h2>
@@ -456,6 +461,13 @@
 
   <!-- ============ RECEITAS ============ -->
   <section class="view" id="v-receitas">
+    <div class="filters">
+      <label for="rAno">Ano</label>
+      <select id="rAno" onchange="renderReceitas()"><option value="">Todos</option></select>
+      <label for="rMes">Mês</label>
+      <select id="rMes" onchange="renderReceitas()"><option value="">Todos</option></select>
+      <span class="hint" id="rFiltroInfo" style="margin:0"></span>
+    </div>
     <div class="kpis" id="kpiReceitas"></div>
     <div class="grid2">
       <div class="panel">
@@ -483,11 +495,39 @@
 
   <!-- ============ FINANCEIRO ============ -->
   <section class="view" id="v-financeiro">
+    <div class="filters">
+      <label for="finPeriodo">Período</label>
+      <select id="finPeriodo" onchange="renderFinanceiro()">
+        <option value="tudo">Acumulado (tudo)</option>
+        <option value="ano">Ano</option>
+        <option value="mes">Mês</option>
+        <option value="dia">Dia</option>
+      </select>
+      <span id="wrapFinAno"><label for="finAno">Ano</label>
+        <select id="finAno" onchange="renderFinanceiro()"></select></span>
+      <span id="wrapFinMes"><label for="finMes">Mês</label>
+        <select id="finMes" onchange="renderFinanceiro()"></select></span>
+      <span id="wrapFinDia"><label for="finDia">Dia</label>
+        <input type="date" id="finDia" onchange="renderFinanceiro()"></span>
+      <span class="hint" id="finPeriodoInfo" style="margin:0"></span>
+    </div>
     <div class="kpis" id="kpiFin1"></div>
     <div class="kpis" id="kpiFin2"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Comparativo mês a mês</h2>
+        <p class="hint">Regime de competência. A variação (Δ) compara cada mês com o mês imediatamente anterior. Do mês mais recente para o mais antigo.</p></div>
+      </div>
+      <div class="table-scroll"><table id="tblMesAMes"><thead><tr id="thMesAMes"></tr></thead><tbody></tbody></table></div>
+      <div class="chart" id="chartMesAMes" style="margin-top:14px"></div>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-sw" style="background:var(--serie-entrada)"></span>Receita líquida</div>
+        <div class="legend-item"><span class="legend-sw" style="background:var(--serie-saida)"></span>Custos e despesas</div>
+      </div>
+    </div>
     <div class="grid2">
       <div class="panel">
-        <h2>DRE gerencial — acumulado</h2>
+        <h2 id="tituloDRE">DRE gerencial — acumulado</h2>
         <p class="hint">Regime de competência, pela data do lançamento.</p>
         <div class="table-scroll"><table id="tblDRE"><tbody></tbody></table></div>
       </div>
@@ -1350,6 +1390,28 @@ function badgeAprov(v){
   return `<span class="badge ${cls}">${esc(v)}</span>`;
 }
 
+/* Lista de meses reaproveitada por todos os filtros do painel. */
+const MES_LONGO = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+/** Preenche um <select> preservando o que já estava escolhido. */
+function opcoes(el, itens, rotuloTodos){
+  const antes = el.value;
+  el.innerHTML = (rotuloTodos != null ? `<option value="">${esc(rotuloTodos)}</option>` : '')
+    + itens.map(i => `<option value="${esc(i.v)}">${esc(i.t)}</option>`).join('');
+  if ([...el.options].some(o => o.value === antes)) el.value = antes;
+}
+
+function opcoesMes(el, rotuloTodos){
+  opcoes(el, MES_LONGO.map((m,i) => ({ v:String(i+1), t:m })), rotuloTodos);
+}
+
+/** Anos presentes numa lista de datas, do mais recente para o mais antigo. */
+function anosDe(datas){
+  return [...new Set(datas.filter(d => d).map(d => d.getFullYear()))]
+    .sort((a,b) => b - a).map(a => ({ v:String(a), t:String(a) }));
+}
+
 function preencherFiltros(){
   const st = document.getElementById('fStatus'), tq = document.getElementById('fTanque');
   const vSt = st.value, vTq = tq.value;
@@ -1358,6 +1420,29 @@ function preencherFiltros(){
   st.innerHTML = '<option value="">Todos</option>' + status.map(s => `<option>${esc(s)}</option>`).join('');
   tq.innerHTML = '<option value="">Todos</option>' + tanks.map(s => `<option>${esc(s)}</option>`).join('');
   st.value = vSt; tq.value = vTq;
+
+  const anosLote = anosDe(LOTES.map(l => l.inicio));
+  opcoes(document.getElementById('fAno'), anosLote, 'Todos');
+  opcoesMes(document.getElementById('fMes'), 'Todos');
+  opcoes(document.getElementById('rAno'), anosLote, 'Todos');
+  opcoesMes(document.getElementById('rMes'), 'Todos');
+
+  // Financeiro: os anos saem das datas de lançamento
+  const ds = (DB.lancamentos || []).map(r => parseDate(r['Data']) || parseDate(r['Vencimento']));
+  const anosFin = anosDe(ds);
+  const selAno = document.getElementById('finAno');
+  opcoes(selAno, anosFin.length ? anosFin : [{ v:String(new Date().getFullYear()), t:String(new Date().getFullYear()) }], null);
+  if (!selAno.value && selAno.options.length) selAno.selectedIndex = 0;
+  const selMes = document.getElementById('finMes');
+  if (!selMes.options.length){ opcoesMes(selMes, null); selMes.value = String(new Date().getMonth()+1); }
+  const dia = document.getElementById('finDia');
+  if (!dia.value) dia.value = toISO(hoje());
+}
+
+function limparFiltrosProd(){
+  ['fStatus','fTanque','fAno','fMes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fBusca').value = '';
+  renderProducao();
 }
 
 const COLS_TBL_PROD = ['Lote','Cerveja','Estilo','Tanque','Volume','Início','Etapa atual',
@@ -1368,21 +1453,32 @@ function renderProducao(){
   const fSt = document.getElementById('fStatus').value;
   const fTq = document.getElementById('fTanque').value;
   const fBs = key(document.getElementById('fBusca').value);
+  const fAn = document.getElementById('fAno').value;
+  const fMs = document.getElementById('fMes').value;
 
+  /* Ordem: sempre do lote mais recente para o mais antigo (pela data inicial). */
   const rows = LOTES.filter(l =>
     (!fSt || l.status === fSt) &&
     (!fTq || l.tanque === fTq) &&
+    (!fAn || (l.inicio && l.inicio.getFullYear() === +fAn)) &&
+    (!fMs || (l.inicio && l.inicio.getMonth() + 1 === +fMs)) &&
     (!fBs || key(`${l.lote} ${l.nome} ${l.estilo} ${l.codigo}`).includes(fBs))
-  ).slice().reverse();
+  ).slice().sort((a,b) => (b.inicio ? b.inicio.getTime() : -Infinity)
+                        - (a.inicio ? a.inicio.getTime() : -Infinity)
+                        || (b._row || 0) - (a._row || 0));
 
-  const em30 = LOTES.filter(l => !l.cancelado && l.fim && l.fim >= agora && l.fim <= addDias(agora,30));
+  /* Os KPIs acompanham o filtro — senão o número em cima não bate com a lista embaixo. */
+  const filtrado = rows.length !== LOTES.length;
+  const em30 = rows.filter(l => !l.cancelado && l.fim && l.fim >= agora && l.fim <= addDias(agora,30));
+  const rot = filtrado ? 'no filtro' : '';
   document.getElementById('kpiProducao').innerHTML = [
-    kpi('Lotes cadastrados', String(LOTES.length), '', `${LOTES.filter(l=>l.cancelado).length} cancelado(s)`),
-    kpi('Em produção', String(LOTES.filter(l => !l.cancelado && l.inicio && l.fim && agora>=l.inicio && agora<l.fim).length)),
-    kpi('Planejados', String(LOTES.filter(l => l.status==='PLANEJADO').length)),
+    kpi('Lotes cadastrados', String(rows.length), '',
+        `${rows.filter(l=>l.cancelado).length} cancelado(s)${filtrado ? ` · ${LOTES.length} no total` : ''}`),
+    kpi('Em produção', String(rows.filter(l => !l.cancelado && l.inicio && l.fim && agora>=l.inicio && agora<l.fim).length), '', rot),
+    kpi('Planejados', String(rows.filter(l => l.status==='PLANEJADO').length), '', rot),
     kpi('Envase nos próx. 30 dias', fmtNum(em30.reduce((s,l)=>s+l.volume,0)) + ' L', 'pos', `${em30.length} lote(s)`),
-    kpi('Pendências de rótulo', String(LOTES.filter(l => key(l.rotulo)==='PENDENTE' || key(l.material)==='PENDENTE').length),
-        LOTES.some(l => key(l.rotulo)==='PENDENTE') ? 'warn' : '', 'rótulo ou material'),
+    kpi('Pendências de rótulo', String(rows.filter(l => key(l.rotulo)==='PENDENTE' || key(l.material)==='PENDENTE').length),
+        rows.some(l => key(l.rotulo)==='PENDENTE') ? 'warn' : '', 'rótulo ou material'),
   ].join('');
 
   const editando = podeEditar;
@@ -1392,7 +1488,7 @@ function renderProducao(){
 
   const tb = document.querySelector('#tblProducao tbody');
   if (!rows.length){
-    tb.innerHTML = `<tr><td class="empty" colspan="${COLS_TBL_PROD.length+1}">Nenhum lote encontrado.</td></tr>`;
+    tb.innerHTML = `<tr><td class="empty" colspan="${COLS_TBL_PROD.length+1}">Nenhum lote nesse filtro.</td></tr>`;
   } else {
     tb.innerHTML = rows.map(l => {
       const pct = Math.round(l.progresso * 100);
@@ -1456,11 +1552,29 @@ function renderCronograma(){
 function renderReceitas(){
   const custos = custosPorCerveja();
   const precoL = PARAM['PRECO MEDIO LITRO'] || 0;
-  const codigos = [...new Set([
+  let codigos = [...new Set([
     ...Object.keys(CERVEJA),
     ...LOTES.map(l => key(l.codigo)).filter(c => c),
     ...(DB.leadtime || []).map(r => key(r['Codigo'])).filter(c => c),
   ])].sort();
+
+  /* Filtro de período: mostra só as cervejas que tiveram lote iniciado
+     no ano/mês escolhido. A ficha em si não tem data — quem tem é o lote. */
+  const rAn = document.getElementById('rAno').value;
+  const rMs = document.getElementById('rMes').value;
+  const info = document.getElementById('rFiltroInfo');
+  if (rAn || rMs){
+    const noPeriodo = new Set(LOTES.filter(l =>
+      l.inicio && (!rAn || l.inicio.getFullYear() === +rAn)
+               && (!rMs || l.inicio.getMonth() + 1 === +rMs)
+    ).map(l => key(l.codigo)).filter(c => c));
+    codigos = codigos.filter(c => noPeriodo.has(c));
+    info.textContent = `Cervejas com lote iniciado em `
+      + `${rMs ? MES_LONGO[+rMs-1] : 'qualquer mês'}${rAn ? ' de ' + rAn : ''}`
+      + ` — ${codigos.length} produto(s).`;
+  } else {
+    info.textContent = '';
+  }
 
   /* KPIs */
   const leads = codigos.map(c => receitaEtapas(c).reduce((s,e)=>s+e.dias,0)).filter(v => v>0);
@@ -1590,9 +1704,60 @@ function lancamentos(){
 
 function somaGrupo(ls, grupo){ return ls.filter(l => l.grupo === grupo).reduce((s,l) => s + l.valor, 0); }
 
+/** Resumo de DRE de uma lista de lançamentos — usado no acumulado e mês a mês. */
+function resumoDRE(ls){
+  const receitaBruta = somaGrupo(ls,'RECEITA BRUTA');
+  const deducoes     = somaGrupo(ls,'DEDUCOES');
+  const receitaLiq   = receitaBruta - deducoes;
+  const cmv          = somaGrupo(ls,'CMV');
+  const lucroBruto   = receitaLiq - cmv;
+  const despOper     = somaGrupo(ls,'DESPESAS OPERACIONAIS');
+  const despCom      = somaGrupo(ls,'DESPESAS COMERCIAIS');
+  const despAdm      = somaGrupo(ls,'DESPESAS ADMINISTRATIVAS');
+  const despesas     = despOper + despCom + despAdm;
+  const ebitda       = lucroBruto - despesas;
+  const recFin       = somaGrupo(ls,'RECEITAS FINANCEIRAS');
+  const despFin      = somaGrupo(ls,'DESPESAS FINANCEIRAS');
+  return { receitaBruta, deducoes, receitaLiq, cmv, lucroBruto,
+           despOper, despCom, despAdm, despesas, ebitda, recFin, despFin,
+           resultado: ebitda + recFin - despFin,
+           invest: somaGrupo(ls,'INVESTIMENTOS') };
+}
+
+/* Lê a barra de período e mostra só os controles que fazem sentido para ela. */
+function periodoFin(){
+  const modo = document.getElementById('finPeriodo').value || 'tudo';
+  document.getElementById('wrapFinAno').style.display = (modo === 'ano' || modo === 'mes') ? '' : 'none';
+  document.getElementById('wrapFinMes').style.display = (modo === 'mes') ? '' : 'none';
+  document.getElementById('wrapFinDia').style.display = (modo === 'dia') ? '' : 'none';
+
+  if (modo === 'tudo') return { modo, ini:null, fim:null, rotulo:'acumulado' };
+  const ano = +document.getElementById('finAno').value || new Date().getFullYear();
+  if (modo === 'ano')
+    return { modo, ano, ini:new Date(ano,0,1), fim:new Date(ano,11,31,23,59,59), rotulo:String(ano) };
+  if (modo === 'mes'){
+    const m = +document.getElementById('finMes').value || (new Date().getMonth()+1);
+    return { modo, ano, mes:m, ini:new Date(ano,m-1,1), fim:new Date(ano,m,0,23,59,59),
+             rotulo:`${MES_LONGO[m-1]} de ${ano}` };
+  }
+  const d = parseDate(document.getElementById('finDia').value) || hoje();
+  return { modo, ano:d.getFullYear(),
+           ini:new Date(d.getFullYear(), d.getMonth(), d.getDate()),
+           fim:new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23,59,59),
+           rotulo: fmtDate(d) };
+}
+
 function renderFinanceiro(){
-  const ls = lancamentos();
+  const P     = periodoFin();
+  const todos = lancamentos();
+  const dentro = d => !P.ini || (d && d >= P.ini && d <= P.fim);
+  const ls    = P.ini ? todos.filter(l => dentro(l.data)) : todos;
   const agora = hoje();
+
+  document.getElementById('finPeriodoInfo').textContent =
+    P.modo === 'tudo' ? 'Todos os lançamentos desde o início.'
+    : `${ls.length} lançamento(s) em ${P.rotulo}.`;
+  document.getElementById('tituloDRE').textContent = `DRE gerencial — ${P.rotulo}`;
 
   /* ---------- DRE ---------- */
   const receitaBruta = somaGrupo(ls,'RECEITA BRUTA');
@@ -1611,20 +1776,25 @@ function renderFinanceiro(){
   const pct = v => receitaLiq ? (v / receitaLiq) * 100 : null;
 
   /* ---------- Caixa e contas em aberto ---------- */
+  /* O caixa é sempre acumulado ATÉ o fim do período — saldo não "reseta" no mês. */
   const saldoIni = PARAM['SALDO INICIAL CAIXA'] || 0;
-  const recebido = ls.filter(l => l.tipo === 'ENTRADA' && l.liquidado).reduce((s,l) => s + l.valor, 0);
-  const pagoOut  = ls.filter(l => l.tipo === 'SAIDA'   && l.liquidado).reduce((s,l) => s + l.valor, 0);
+  const dataCaixa = l => l.pago || l.venc || l.data;
+  const ateFim   = l => !P.fim || (dataCaixa(l) && dataCaixa(l) <= P.fim);
+  const liq      = todos.filter(l => l.liquidado && ateFim(l));
+  const recebido = liq.filter(l => l.tipo === 'ENTRADA').reduce((s,l) => s + l.valor, 0);
+  const pagoOut  = liq.filter(l => l.tipo === 'SAIDA'  ).reduce((s,l) => s + l.valor, 0);
   const caixa    = saldoIni + recebido - pagoOut;
 
-  const aReceber = ls.filter(l => l.tipo === 'ENTRADA' && !l.liquidado);
-  const aPagar   = ls.filter(l => l.tipo === 'SAIDA'   && !l.liquidado);
+  /* Títulos em aberto são posição de hoje — não fazem sentido "dentro do mês". */
+  const aReceber = todos.filter(l => l.tipo === 'ENTRADA' && !l.liquidado);
+  const aPagar   = todos.filter(l => l.tipo === 'SAIDA'   && !l.liquidado);
   const totRec   = aReceber.reduce((s,l) => s + l.valor, 0);
   const totPag   = aPagar.reduce((s,l) => s + l.valor, 0);
   const vencidos = [...aReceber, ...aPagar].filter(l => l.venc && l.venc < agora);
   const capitalGiro = caixa + totRec - totPag;
 
   document.getElementById('kpiFin1').innerHTML = [
-    kpi('Receita bruta', fmtBRLc(receitaBruta), 'pos', 'acumulado'),
+    kpi('Receita bruta', fmtBRLc(receitaBruta), 'pos', P.rotulo),
     kpi('Receita líquida', fmtBRLc(receitaLiq), '', `deduções ${fmtBRLc(deducoes)}`),
     kpi('CMV', fmtBRLc(cmv), '', pct(cmv) != null ? `${fmtPct(pct(cmv))} da receita líquida` : ''),
     kpi('Lucro bruto', fmtBRLc(lucroBruto), lucroBruto >= 0 ? 'pos' : 'neg',
@@ -1636,9 +1806,10 @@ function renderFinanceiro(){
   document.getElementById('kpiFin2').innerHTML = [
     kpi('Resultado líquido', fmtBRLc(resultado), resultado >= 0 ? 'pos' : 'neg',
         pct(resultado) != null ? `margem líquida ${fmtPct(pct(resultado))}` : ''),
-    kpi('Saldo em caixa', fmtBRLc(caixa), caixa >= 0 ? '' : 'neg', `saldo inicial ${fmtBRLc(saldoIni)}`),
-    kpi('Contas a receber', fmtBRLc(totRec), '', `${aReceber.length} título(s)`),
-    kpi('Contas a pagar', fmtBRLc(totPag), '', `${aPagar.length} título(s)`),
+    kpi('Saldo em caixa', fmtBRLc(caixa), caixa >= 0 ? '' : 'neg',
+        P.modo === 'tudo' ? `saldo inicial ${fmtBRLc(saldoIni)}` : `acumulado até ${fmtDate(P.fim)}`),
+    kpi('Contas a receber', fmtBRLc(totRec), '', `${aReceber.length} título(s) em aberto hoje`),
+    kpi('Contas a pagar', fmtBRLc(totPag), '', `${aPagar.length} título(s) em aberto hoje`),
     kpi('Títulos vencidos', String(vencidos.length), vencidos.length ? 'warn' : '',
         fmtBRLc(vencidos.reduce((s,l) => s + l.valor, 0))),
     kpi('Capital de giro', fmtBRLc(capitalGiro), capitalGiro >= 0 ? 'pos' : 'neg', 'caixa + a receber − a pagar'),
@@ -1667,8 +1838,11 @@ function renderFinanceiro(){
   ].join('');
 
   /* ---------- Fluxo de caixa mensal ---------- */
+  /* O gráfico é uma tendência: usa o ano inteiro, não o recorte de mês/dia. */
+  const doAno = P.modo === 'tudo' ? todos : todos.filter(l => {
+    const d = l.venc || l.data; return d && d.getFullYear() === P.ano; });
   const meses = {};
-  ls.forEach(l => {
+  doAno.forEach(l => {
     if (!l.venc) return;
     const k = `${l.venc.getFullYear()}-${String(l.venc.getMonth()+1).padStart(2,'0')}`;
     (meses[k] = meses[k] || { e:0, s:0 });
@@ -1720,7 +1894,9 @@ function renderFinanceiro(){
   tabelaAberto('thAR','tblAR', aReceber, 'a receber');
   tabelaAberto('thAP','tblAP', aPagar, 'a pagar');
 
-  /* ---------- Lançamentos ---------- */
+  renderMesAMes(todos, P);
+
+  /* ---------- Lançamentos (sempre do mais recente para o mais antigo) ---------- */
   const editando = podeEditar;
   document.getElementById('thLanc').innerHTML =
     ['Data','Tipo','Conta','Centro de custo','Descrição','Valor','Vencimento','Status','Lote','Doc.']
@@ -1737,7 +1913,98 @@ function renderFinanceiro(){
       <td>${esc(l.lote)}</td><td style="color:var(--txt2)">${esc(l.doc)}</td>
       ${editando ? `<td><button class="btn icon-btn" title="Editar lançamento"
           onclick="openLancModal(${l._row})">✏️</button></td>` : ''}
-    </tr>`).join('') || `<tr><td class="empty" colspan="11">Sem lançamentos.</td></tr>`;
+    </tr>`).join('') || `<tr><td class="empty" colspan="11">Sem lançamentos no período.</td></tr>`;
+}
+
+/* ------------------------- COMPARATIVO MÊS A MÊS -------------------------
+   Uma linha por mês de competência, do mais recente para o mais antigo, com
+   a variação percentual contra o mês imediatamente anterior.               */
+const COLS_MAM = [
+  { t:'Receita líquida', f:r => r.receitaLiq,  delta:true  },
+  { t:'(−) CMV',         f:r => -r.cmv || 0                },
+  { t:'Lucro bruto',     f:r => r.lucroBruto               },
+  { t:'(−) Despesas',    f:r => -r.despesas || 0           },
+  { t:'EBITDA',          f:r => r.ebitda                   },
+  { t:'Resultado',       f:r => r.resultado, delta:true    },
+];
+
+/** Variação percentual contra o mês anterior, já formatada. */
+function deltaCel(atual, anterior){
+  if (anterior == null) return '<td class="num" style="color:var(--txt3)">—</td>';
+  if (!anterior) return `<td class="num" style="color:var(--txt3)">${atual ? 'novo' : '—'}</td>`;
+  const v = (atual - anterior) / Math.abs(anterior) * 100;
+  const bom = v >= 0;
+  return `<td class="num"><span class="badge ${bom ? 'ok' : 'err'}">`
+       + `${bom ? '▲' : '▼'} ${fmtPct(Math.abs(v))}</span></td>`;
+}
+
+function renderMesAMes(todos, P){
+  const th = document.getElementById('thMesAMes');
+  const tb = document.querySelector('#tblMesAMes tbody');
+  const ch = document.getElementById('chartMesAMes');
+
+  /* No modo "acumulado" mostra os últimos 12 meses; com ano escolhido, o ano todo. */
+  const base = P.modo === 'tudo' ? todos
+             : todos.filter(l => l.data && l.data.getFullYear() === P.ano);
+  const porMes = {};
+  base.forEach(l => {
+    if (!l.data) return;
+    const k = `${l.data.getFullYear()}-${String(l.data.getMonth()+1).padStart(2,'0')}`;
+    (porMes[k] = porMes[k] || []).push(l);
+  });
+  const chaves = Object.keys(porMes).sort();               // cronológico
+  const usar   = P.modo === 'tudo' ? chaves.slice(-12) : chaves;
+
+  th.innerHTML = '<th>Mês</th>'
+    + COLS_MAM.map(c => `<th class="num">${esc(c.t)}</th>`
+        + (c.delta ? `<th class="num" title="Variação contra o mês anterior">Δ mês ant.</th>` : '')).join('');
+
+  if (!usar.length){
+    tb.innerHTML = `<tr><td class="empty" colspan="${COLS_MAM.length+3}">Sem lançamentos para comparar.</td></tr>`;
+    ch.innerHTML = '<div class="chart-x" style="margin:auto">Sem dados.</div>';
+    return;
+  }
+
+  const res = {};
+  usar.forEach(k => res[k] = resumoDRE(porMes[k]));
+
+  /* A tabela sai invertida: mais recente em cima. */
+  tb.innerHTML = usar.slice().reverse().map(k => {
+    const [a, m] = k.split('-');
+    const i   = chaves.indexOf(k);
+    const ant = i > 0 ? resumoDRE(porMes[chaves[i-1]]) : null;
+    return `<tr><td><b>${MES_LONGO[+m-1]}</b> <span style="color:var(--txt3)">${a}</span></td>`
+      + COLS_MAM.map(c => {
+          const v = c.f(res[k]);
+          const cel = `<td class="num" style="color:${v < 0 ? 'var(--txt2)' : 'var(--txt)'}">${fmtBRL(v)}</td>`;
+          return cel + (c.delta ? deltaCel(v, ant ? c.f(ant) : null) : '');
+        }).join('')
+      + '</tr>';
+  }).join('');
+
+  /* Gráfico: receita líquida × custos e despesas, na ordem do tempo. */
+  const maxV = Math.max(1, ...usar.map(k => Math.max(res[k].receitaLiq, res[k].cmv + res[k].despesas)));
+  ch.innerHTML = `<div class="chart-max">máx. ${fmtBRLc(maxV)}</div>` + usar.map(k => {
+    const [a, m] = k.split('-'), r = res[k];
+    const custo = r.cmv + r.despesas;
+    const h = v => Math.max(2, (v / maxV) * 142);
+    return `<div class="chart-col">
+      <div class="chart-pair">
+        <div class="chart-bar" style="height:${h(r.receitaLiq)}px;background:var(--serie-entrada)"
+             data-tip="Receita líquida|${MES_LONGO[+m-1]}/${a}|${fmtBRL(r.receitaLiq)}"></div>
+        <div class="chart-bar" style="height:${h(custo)}px;background:var(--serie-saida)"
+             data-tip="Custos e despesas|${MES_LONGO[+m-1]}/${a}|${fmtBRL(custo)}"></div>
+      </div>
+      <div class="chart-x">${MES[+m-1]}/${String(a).slice(2)}</div>
+    </div>`;
+  }).join('');
+  ch.querySelectorAll('.chart-bar[data-tip]').forEach(b => {
+    b.addEventListener('mousemove', ev => {
+      const [serie, mes, val] = b.dataset.tip.split('|');
+      showTip(ev, `<b>${serie}</b><div class="r">${mes}</div><div>${val}</div>`);
+    });
+    b.addEventListener('mouseleave', hideTip);
+  });
 }
 </script>
 
