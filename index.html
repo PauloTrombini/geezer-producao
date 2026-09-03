@@ -119,10 +119,21 @@
   .queue{ margin-top:9px; padding-top:9px; border-top:1px solid var(--border); }
   .queue-lbl{ color:var(--txt3); font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
   .chip{
-    display:flex; align-items:center; gap:6px; margin-top:5px;
+    display:flex; align-items:center; gap:6px; margin-top:5px; width:100%;
     background:var(--panel3); border:1px solid var(--border2); border-radius:7px;
-    padding:4px 7px; font-size:11.5px;
+    padding:4px 7px; font-size:11.5px; font-family:inherit; color:inherit;
+    text-align:left; cursor:pointer; transition:border-color .15s, background .15s;
   }
+  .chip:hover{ border-color:var(--accent); background:var(--panel2); }
+  .chip:hover .nm{ color:var(--accent); }
+  .chip .nm{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* linha "Próxima: X em dd/mm" dos tanques livres, também clicável */
+  .prox-btn{
+    background:none; border:none; padding:0; font:inherit; color:var(--txt2);
+    text-align:left; cursor:pointer; margin-top:6px; font-size:11.5px;
+  }
+  .prox-btn b{ color:var(--txt); }
+  .prox-btn:hover b{ color:var(--accent); text-decoration:underline; }
   .chip .sw{ width:9px; height:9px; border-radius:2px; flex:none; }
   .chip .dt{ margin-left:auto; color:var(--txt3); font-size:11px; white-space:nowrap; }
 
@@ -1187,12 +1198,14 @@ function renderTanques(){
     const l = t.atual;
     const ratio = l && t.capacidade ? l.volume / t.capacidade : 0;
     const cor = l ? l.cor : '#2b3760';
+    // Cada cerveja da fila abre a mesma janela de detalhes do lote.
     const fila = t.fila.slice(0, 3).map(f => `
-      <div class="chip">
+      <button class="chip" onclick="abrirLote('${esc(f.lote)}')"
+              title="Ver cronograma, custeio e ficha de ${esc(f.nome)}">
         <span class="sw" style="background:${f.cor}"></span>
-        <span>${esc(f.nome)}</span>
+        <span class="nm">${esc(f.nome)}</span>
         <span class="dt">${fmtDateShort(f.tanqueIni)}</span>
-      </div>`).join('');
+      </button>`).join('');
 
     const btnNovo = podeEditar
       ? `<div class="tank-actions"><button class="btn" onclick="openLoteModal(0,'${esc(t.rotulo)}')">+ Cerveja neste tanque</button></div>`
@@ -1206,9 +1219,10 @@ function renderTanques(){
         ${tankSVG('t'+i, 0, cor, true)}
         <div class="tank-beer" style="color:var(--txt2)">Tanque livre</div>
         <div class="tank-meta">${esc(t.tipo || '—')}${t.local ? ' · ' + esc(t.local) : ''}</div>
-        <div class="tank-foot">${prox
-          ? `Próxima: <b>${esc(prox.nome)}</b> em ${fmtDate(prox.tanqueIni)}`
-          : 'Sem lote programado'}</div>
+        ${prox
+          ? `<button class="prox-btn" onclick="abrirLote('${esc(prox.lote)}')"
+               title="Ver cronograma, custeio e ficha de ${esc(prox.nome)}">Próxima: <b>${esc(prox.nome)}</b> em ${fmtDate(prox.tanqueIni)}</button>`
+          : '<div class="tank-foot">Sem lote programado</div>'}
         ${fila ? `<div class="queue"><div class="queue-lbl">Fila</div>${fila}</div>` : ''}
         ${btnNovo}
       </div>`;
