@@ -266,6 +266,50 @@
   .check{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--txt2); margin-top:12px; }
   .sep{ border:none; border-top:1px solid var(--border); margin:18px 0 14px; }
 
+  /* ---------- Semáforo de custeio ---------- */
+  .semaforo{
+    display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:20px;
+    font-size:10px; font-weight:700; letter-spacing:.03em;
+  }
+  .semaforo.sem{ background:rgba(245,97,92,.16); color:var(--red); }
+  .semaforo.ok{  background:rgba(47,208,138,.16); color:var(--green); }
+  .semaforo .luz{ width:7px; height:7px; border-radius:50%; background:currentColor; flex:none; }
+  .tank-card.sem-custeio{ border-color:rgba(245,97,92,.5); }
+  tr.sem-custeio td:first-child b{ color:var(--red); }
+
+  /* ---------- Botões dentro do card do tanque ---------- */
+  .beer-btn{
+    display:block; width:100%; text-align:left; background:none; border:none; padding:0;
+    font-family:inherit; color:inherit; cursor:pointer;
+  }
+  .beer-btn:hover .tank-beer{ color:var(--accent); text-decoration:underline; }
+  .tank-actions{ margin-top:10px; }
+  .tank-actions .btn{ width:100%; padding:6px 10px; font-size:12px; }
+
+  /* ---------- Blocos da ficha de composição ---------- */
+  .bloco{
+    border:1px solid var(--border); border-radius:11px; overflow:hidden; margin-bottom:12px;
+    background:var(--panel2);
+  }
+  .bloco-head{
+    display:flex; align-items:center; gap:10px; padding:10px 13px;
+    background:var(--panel3); border-bottom:1px solid var(--border);
+  }
+  .bloco-nome{ font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+  .bloco-tag{ width:9px; height:9px; border-radius:3px; flex:none; }
+  .bloco-tot{ margin-left:auto; font-size:12.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .bloco-pct{ font-size:11.5px; color:var(--txt2); width:52px; text-align:right; font-variant-numeric:tabular-nums; }
+  .bloco table{ font-size:12.5px; }
+  .bloco th{ background:var(--panel2); }
+  .bloco td, .bloco th{ padding:7px 13px; }
+  .bloco tbody tr:last-child td{ border-bottom:none; }
+
+  /* ---------- Detalhe do lote ---------- */
+  .det-sec{ margin-top:20px; }
+  .det-sec h4{
+    margin:0 0 10px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--txt2);
+  }
+
   /* ---------- Ficha de composição ---------- */
   .modal.wide{ max-width:860px; }
   .comp-head{ display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr)); gap:10px; margin-bottom:18px; }
@@ -418,9 +462,9 @@
       <div class="panel-head">
         <div>
           <h2>Fichas de composição</h2>
-          <p class="hint">Uma linha por produto. Clique na linha para abrir a composição completa e o custeio.</p>
+          <p class="hint">As cervejas entram aqui sozinhas assim que aparecem num tanque. Em vermelho, as que ainda não têm custo lançado. Clique na linha para abrir a composição.</p>
         </div>
-        <button class="btn btn-primary" id="novaFichaBtn" style="display:none;" onclick="novaFicha()">+ Nova ficha</button>
+        <button class="btn btn-primary" id="novaFichaBtn" style="display:none;" onclick="escolherParaCustear()">Cadastrar insumos e custos</button>
       </div>
       <div class="table-scroll"><table id="tblFichas"><thead><tr id="thFichas"></tr></thead><tbody></tbody></table></div>
     </div>
@@ -496,9 +540,7 @@
     <h3 id="compTitulo">Composição do produto</h3>
     <div class="modal-sub" id="compSub"></div>
     <div class="comp-head" id="compKpis"></div>
-    <div class="table-scroll" style="max-height:340px">
-      <table id="tblComp"><thead><tr id="thComp"></tr></thead><tbody></tbody></table>
-    </div>
+    <div class="table-scroll" style="max-height:360px" id="compBlocos"></div>
     <div id="compForm" style="display:none">
       <hr class="sep">
       <div class="add-row">
@@ -520,14 +562,32 @@
   </div>
 </div>
 
-<div class="overlay" id="produtoOverlay">
-  <div class="modal">
-    <h3>Nova ficha de composição</h3>
-    <div class="modal-sub">Cadastra o produto na aba Cervejas. Os insumos são adicionados em seguida, na janela de composição.</div>
-    <form id="produtoForm" class="field-grid" onsubmit="return false;"></form>
+<div class="overlay" id="loteDetOverlay">
+  <div class="modal wide">
+    <h3 id="loteDetTitulo">Lote</h3>
+    <div class="modal-sub" id="loteDetSub"></div>
+    <div class="comp-head" id="loteDetKpis"></div>
+    <div class="det-sec">
+      <h4>Cronograma de produção</h4>
+      <div class="table-scroll" style="max-height:260px" id="loteDetCron"></div>
+    </div>
+    <div class="det-sec">
+      <h4>Custeio da ficha de composição</h4>
+      <div class="table-scroll" style="max-height:300px" id="loteDetCusto"></div>
+    </div>
     <div class="modal-actions">
-      <button type="button" class="btn" onclick="closeModal('produtoOverlay')">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="produtoSaveBtn" onclick="salvarProduto()">Criar ficha</button>
+      <button type="button" class="btn" onclick="closeModal('loteDetOverlay')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="insumoPickOverlay">
+  <div class="modal">
+    <h3>Cadastrar insumos e custos</h3>
+    <div class="modal-sub">Escolha a cerveja para abrir a ficha de composição. As que estão em vermelho ainda não têm custo lançado.</div>
+    <div id="insumoPickLista"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('insumoPickOverlay')">Fechar</button>
     </div>
   </div>
 </div>
@@ -1007,8 +1067,10 @@ function custosPorCerveja(){
     const c = key(l.codigo);
     if (l.volume > 0) volLote[c] = Math.max(volLote[c] || 0, l.volume);
   });
-  // garante uma entrada para todo produto do catálogo, mesmo sem insumos ainda
+  // Toda cerveja do catálogo E toda cerveja já usada em algum tanque entra na
+  // lista, mesmo sem insumo nenhum — é isso que faz a ficha aparecer sozinha.
   Object.keys(CERVEJA).forEach(c => { out[c] = out[c] || { total:0, itens:[] }; });
+  LOTES.forEach(l => { const c = key(l.codigo); if (c) out[c] = out[c] || { total:0, itens:[] }; });
   Object.keys(out).forEach(c => {
     const v = (CERVEJA[c] && CERVEJA[c].volumePadrao) || volLote[c] || 0;
     out[c].volume = v;
@@ -1016,6 +1078,19 @@ function custosPorCerveja(){
     out[c].porLitro = v > 0 ? out[c].total / v : null;
   });
   return out;
+}
+
+/** A cerveja já tem ficha de composição custeada? */
+function temCusteio(codigo){
+  const k = custosPorCerveja()[key(codigo)];
+  return !!(k && k.itens.length && k.total > 0);
+}
+
+/** Selo verde/vermelho de custeio. */
+function selo(codigo){
+  return temCusteio(codigo)
+    ? '<span class="semaforo ok"><span class="luz"></span>CUSTEADA</span>'
+    : '<span class="semaforo sem"><span class="luz"></span>SEM CUSTEIO</span>';
 }
 
 /** Valores de uma coluna da aba Listas (usada nos selects). */
@@ -1089,6 +1164,8 @@ function renderTanques(){
   const proximos = LOTES.filter(l => !l.cancelado && l.fim && l.fim >= agora).sort((a,b) => a.fim - b.fim);
   const prox     = proximos[0];
   const ocupPct  = capTotal ? (litros / capTotal) * 100 : 0;
+  const custos   = custosPorCerveja();
+  const semCusteio = Object.keys(custos).filter(c => !(custos[c].itens.length && custos[c].total > 0));
 
   document.getElementById('kpiTanques').innerHTML = [
     kpi('Tanques ocupados', `${ocupados} <span style="font-size:14px;color:var(--txt3)">/ ${tanques.length}</span>`,
@@ -1098,6 +1175,9 @@ function renderTanques(){
     kpi('Próximo envase', prox ? fmtDate(prox.fim) : '—', 'pos',
         prox ? `${esc(prox.nome)} · ${esc(prox.lote)}` : 'nenhum lote em andamento'),
     kpi('Capacidade instalada', fmtNum(capTotal) + ' L', '', `${tanques.length} fermentadores`),
+    kpi('Cervejas sem custeio', String(semCusteio.length), semCusteio.length ? 'neg' : 'pos',
+        semCusteio.length ? semCusteio.slice(0,3).map(c => esc((CERVEJA[c]||{}).nome || c)).join(', ')
+                          : 'todas com ficha custeada'),
   ].join('');
 
   /* --- Cards --- */
@@ -1112,6 +1192,10 @@ function renderTanques(){
         <span class="dt">${fmtDateShort(f.tanqueIni)}</span>
       </div>`).join('');
 
+    const btnNovo = podeEditar
+      ? `<div class="tank-actions"><button class="btn" onclick="openLoteModal(0,'${esc(t.rotulo)}')">+ Cerveja neste tanque</button></div>`
+      : '';
+
     if (!l){
       const prox = t.fila[0];
       return `<div class="tank-card free">
@@ -1124,21 +1208,27 @@ function renderTanques(){
           ? `Próxima: <b>${esc(prox.nome)}</b> em ${fmtDate(prox.tanqueIni)}`
           : 'Sem lote programado'}</div>
         ${fila ? `<div class="queue"><div class="queue-lbl">Fila</div>${fila}</div>` : ''}
+        ${btnNovo}
       </div>`;
     }
 
     const pct = Math.round(l.progresso * 100);
-    return `<div class="tank-card">
+    const custeada = temCusteio(l.codigo);
+    return `<div class="tank-card${custeada ? '' : ' sem-custeio'}">
       <div class="tank-top"><span class="tank-name">${esc(t.rotulo)}</span>
         <span class="tank-cap">${fmtNum(l.volume)} / ${fmtNum(t.capacidade)} L</span></div>
       ${tankSVG('t'+i, ratio, cor, false)}
-      <div class="tank-beer">${esc(l.nome)}</div>
-      <div class="tank-meta">${esc(l.estilo)}${l.abv != null ? ' · ' + fmtNum(l.abv,1) + '% ABV' : ''} · ${esc(l.lote)}</div>
+      <button class="beer-btn" onclick="abrirLote('${esc(l.lote)}')" title="Ver cronograma, custeio e ficha da cerveja">
+        <div class="tank-beer">${esc(l.nome)} <span style="color:var(--txt3);font-weight:400">›</span></div>
+        <div class="tank-meta">${esc(l.estilo)}${l.abv != null ? ' · ' + fmtNum(l.abv,1) + '% ABV' : ''} · ${esc(l.lote)}</div>
+      </button>
+      <div style="margin-top:7px">${selo(l.codigo)}</div>
       ${pillEtapa(l.etapaAtual)}
       <div class="bar"><span style="width:${pct}%;background:${ETAPA_COR[l.etapaAtual?.etapa] || 'var(--accent)'}"></span></div>
       <div class="tank-foot">Envase previsto <b>${fmtDate(l.fim)}</b> · faltam <b>${l.diasRestantes ?? '—'} d</b></div>
       <div class="tank-foot">Libera o tanque em <b>${fmtDate(l.tanqueFim)}</b></div>
       ${fila ? `<div class="queue"><div class="queue-lbl">Próximas neste tanque</div>${fila}</div>` : ''}
+      ${btnNovo}
     </div>`;
   }).join('');
 
@@ -1352,6 +1442,7 @@ function renderReceitas(){
   const precoL = PARAM['PRECO MEDIO LITRO'] || 0;
   const codigos = [...new Set([
     ...Object.keys(CERVEJA),
+    ...LOTES.map(l => key(l.codigo)).filter(c => c),
     ...(DB.leadtime || []).map(r => key(r['Codigo'])).filter(c => c),
   ])].sort();
 
@@ -1361,7 +1452,9 @@ function renderReceitas(){
   const mediaLead = leads.length ? leads.reduce((a,b)=>a+b,0)/leads.length : null;
   const mediaCpl  = cpl.length ? cpl.reduce((a,b)=>a+b,0)/cpl.length : null;
   document.getElementById('kpiReceitas').innerHTML = [
-    kpi('Cervejas cadastradas', String(codigos.length)),
+    kpi('Cervejas cadastradas', String(codigos.length), '',
+        (() => { const n = codigos.filter(c => !(custos[c] && custos[c].itens.length && custos[c].total > 0)).length;
+                 return n ? `<span style="color:var(--red)">${n} sem custeio</span>` : 'todas custeadas'; })()),
     kpi('Lead time médio', mediaLead ? fmtNum(mediaLead,1) + ' dias' : '—', '', 'da brassagem ao envase'),
     kpi('Custo médio de insumos', mediaCpl != null ? fmtBRL(mediaCpl) + '/L' : '—', '', 'malte, lúpulo, levedura'),
     kpi('Preço médio de venda', precoL ? fmtBRL(precoL) + '/L' : '—', '', 'aba Fin_Parametros'),
@@ -1410,25 +1503,27 @@ function renderReceitas(){
   /* Fichas de composição — uma linha por produto */
   document.getElementById('novaFichaBtn').style.display = podeEditar ? '' : 'none';
   document.getElementById('thFichas').innerHTML =
-    ['Código','Produto','Estilo','Itens','Volume ref.','Custo insumos','Custo/L','Marg. insumos','']
-    .map((c,i) => `<th${[3,4,5,6,7].includes(i) ? ' class="num"' : ''}>${c}</th>`).join('');
+    ['Código','Produto','Estilo','Custeio','Itens','Volume ref.','Custo insumos','Custo/L','Marg. insumos','']
+    .map((c,i) => `<th${[4,5,6,7,8].includes(i) ? ' class="num"' : ''}>${c}</th>`).join('');
   document.querySelector('#tblFichas tbody').innerHTML = codigos.map(c => {
     const k = custos[c] || { total:0, itens:[], volume:0, porLitro:null };
     const cv = CERVEJA[c] || {};
+    const ok = k.itens.length > 0 && k.total > 0;
     const mg = (k.porLitro != null && precoL) ? (precoL - k.porLitro) / precoL * 100 : null;
-    return `<tr class="row-click" onclick="abrirComposicao('${esc(c)}')">
+    return `<tr class="row-click${ok ? '' : ' sem-custeio'}" onclick="abrirComposicao('${esc(c)}')">
       <td>${esc(c)}</td>
       <td><b>${esc(cv.nome || c)}</b></td>
       <td>${esc(cv.estilo || '—')}</td>
-      <td class="num">${k.itens.length || '<span style="color:var(--txt3)">0</span>'}</td>
+      <td>${selo(c)}</td>
+      <td class="num">${k.itens.length || '<span style="color:var(--red)">0</span>'}</td>
       <td class="num">${k.volume ? fmtNum(k.volume) + ' L' : '—'}</td>
       <td class="num">${k.total ? fmtBRLc(k.total) : '—'}</td>
       <td class="num">${k.porLitro != null ? fmtBRL(k.porLitro) : '—'}</td>
       <td class="num">${mg == null ? '—'
         : `<span class="badge ${mg >= 60 ? 'ok' : (mg >= 40 ? 'warn' : 'err')}">${fmtPct(mg)}</span>`}</td>
-      <td><button class="btn icon-btn" onclick="event.stopPropagation();abrirComposicao('${esc(c)}')">Ver composição</button></td>
+      <td><button class="btn icon-btn" onclick="event.stopPropagation();abrirComposicao('${esc(c)}')">${ok ? 'Ver composição' : 'Custear'}</button></td>
     </tr>`;
-  }).join('') || `<tr><td class="empty" colspan="9">Nenhum produto cadastrado.</td></tr>`;
+  }).join('') || `<tr><td class="empty" colspan="10">Nenhum produto cadastrado.</td></tr>`;
 }
 </script>
 
@@ -1661,6 +1756,23 @@ function campo(nome, tipo, valor, opcoes, wide){
   return `<div class="field-row${wide ? ' wide' : ''}"><label for="${id}">${esc(nome)}</label>${ctrl}</div>`;
 }
 
+/** Campo que aceita escolher da lista OU digitar um valor novo. */
+function campoLivre(nome, valor, opcoes, dica, wide){
+  const id = 'f_' + nome.replace(/[^A-Za-z0-9]/g,'_');
+  return `<div class="field-row${wide ? ' wide' : ''}">
+    <label for="${id}">${esc(nome)}</label>
+    <input id="${id}" name="${esc(nome)}" list="dl_${id}" value="${esc(valor)}" autocomplete="off">
+    <datalist id="dl_${id}">${opcoes.map(o => `<option value="${esc(o)}">`).join('')}</datalist>
+    ${dica ? `<div style="font-size:11px;color:var(--txt3);margin-top:4px">${esc(dica)}</div>` : ''}
+  </div>`;
+}
+
+/** Próximo código livre do catálogo (GZR006, GZR007, …). */
+function proximoCodigo(){
+  const nums = Object.keys(CERVEJA).map(c => { const m = c.match(/(\d+)\s*$/); return m ? +m[1] : 0; });
+  return 'GZR' + String(Math.max(0, ...nums) + 1).padStart(3,'0');
+}
+
 function proximoLote(){
   const ano = new Date().getFullYear();
   const nums = LOTES.map(l => { const m = l.lote.match(/(\d+)\s*$/); return m ? +m[1] : 0; });
@@ -1669,21 +1781,24 @@ function proximoLote(){
 }
 
 /* ------------------------- LOTE ------------------------- */
-function openLoteModal(row){
+function openLoteModal(row, tanquePre){
   const r = row ? (DB.producao || []).find(x => x._row === row) : null;
   const g = c => r ? norm(r[c]) : '';
   const codigos = Object.keys(CERVEJA);
   const tanques = (DB.tanques || []).map(t => norm(t['Tanque'])).filter(v => v);
 
-  document.getElementById('loteTitle').textContent = r ? `Editar lote ${g('Lote')}` : 'Novo lote';
+  document.getElementById('loteTitle').textContent = r
+    ? `Editar lote ${g('Lote')}`
+    : (tanquePre ? `Nova cerveja no ${tanquePre}` : 'Novo lote');
   document.getElementById('loteForm').dataset.row = row || '';
   document.getElementById('loteForm').innerHTML = [
     campo('Lote','text', r ? g('Lote') : proximoLote()),
-    campo('Codigo','select', g('Codigo'), codigos),
+    campoLivre('Codigo', g('Codigo'), codigos,
+      'Escolha uma cerveja já cadastrada ou digite um código novo.'),
     campo('Nome da Cerveja','text', g('Nome da Cerveja')),
     campo('Estilo','text', g('Estilo')),
     campo('ABV%','number', g('ABV%')),
-    campo('Tanque','select', g('Tanque'), tanques),
+    campo('Tanque','select', r ? g('Tanque') : (tanquePre || ''), tanques),
     campo('Volume (L)','number', g('Volume (L)')),
     campo('Data Inicial','date', r ? toISO(parseDate(g('Data Inicial'))) : toISO(hoje())),
     campo('Status','select', r ? g('Status') : 'PLANEJADO', lista('Status Producao')),
@@ -1693,15 +1808,22 @@ function openLoteModal(row){
     campo('Observacoes','text', g('Observacoes'), null, true),
   ].join('');
 
-  // Ao escolher o código, preenche nome/estilo/ABV a partir do catálogo
+  // Ao escolher um código do catálogo, preenche nome/estilo/ABV sozinho.
+  // Código novo é aceito: a cerveja é criada na aba Cervejas ao salvar.
   const selCod = document.getElementById('f_Codigo');
-  selCod.addEventListener('change', () => {
+  const autoPreencher = () => {
     const c = CERVEJA[key(selCod.value)];
     if (!c) return;
     document.getElementById('f_Nome_da_Cerveja').value = c.nome || '';
     document.getElementById('f_Estilo').value = c.estilo || '';
     if (c.abv != null) document.getElementById('f_ABV_').value = String(c.abv).replace('.', ',');
-  });
+  };
+  selCod.addEventListener('change', autoPreencher);
+  selCod.addEventListener('input', autoPreencher);
+  selCod.insertAdjacentHTML('afterend',
+    `<button type="button" class="btn" style="margin-top:6px;padding:5px 10px;font-size:12px"
+       onclick="document.getElementById('f_Codigo').value='${proximoCodigo()}';document.getElementById('f_Nome_da_Cerveja').focus()">
+       Gerar código novo</button>`);
 
   document.getElementById('loteOverlay').classList.add('open');
 }
@@ -1715,15 +1837,34 @@ async function submitLote(){
   if (!get('Lote')) return toast('Informe o número do lote.', false);
   if (!get('Data Inicial')) return toast('Informe a data inicial.', false);
 
+  const cod = get('Codigo').toUpperCase();
   const values = COLS_PRODUCAO.map(c =>
-    ['ABV%','Volume (L)'].includes(c) ? numOut(get(c)) : get(c));
+    c === 'Codigo' ? cod
+    : ['ABV%','Volume (L)'].includes(c) ? numOut(get(c))
+    : get(c));
 
   const btn = document.getElementById('loteSaveBtn');
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
+    // Código que ainda não existe no catálogo entra automaticamente na aba
+    // Cervejas — assim a ficha de composição já aparece para ser custeada.
+    let cervejaNova = false;
+    if (cod && !CERVEJA[key(cod)] && get('Nome da Cerveja')){
+      await appendRow(TABS.cervejas.name, COLS_CERVEJA.map(c =>
+        c === 'Codigo' ? cod
+        : c === 'Nome da Cerveja' ? get('Nome da Cerveja')
+        : c === 'Estilo' ? get('Estilo')
+        : c === 'ABV%'   ? numOut(get('ABV%'))
+        : c === 'Cor'    ? '#d9a12b'
+        : c === 'Ativo'  ? 'SIM'
+        : c === 'Volume Padrao (L)' ? numOut(get('Volume (L)'))
+        : ''));
+      cervejaNova = true;
+    }
     if (row) await updateRow(TABS.producao.name, row, values);
     else     await appendRow(TABS.producao.name, values);
-    toast(row ? 'Lote atualizado.' : 'Lote criado.', true);
+    toast(row ? 'Lote atualizado.'
+              : (cervejaNova ? `Lote criado e cerveja ${cod} cadastrada — falta custear a ficha.` : 'Lote criado.'), true);
     closeModal('loteOverlay');
     await refresh();
   } catch (e){
@@ -1782,6 +1923,65 @@ async function submitLanc(){
   }
 }
 
+/* ------------------------- DETALHE DO LOTE -------------------------
+   Abre ao clicar no nome da cerveja dentro do fermentador: cronograma
+   etapa a etapa, custeio da ficha e dados da cerveja, numa tela só.   */
+function abrirLote(lote){
+  const l = LOTES.find(x => x.lote === lote);
+  if (!l) return;
+  const cv     = CERVEJA[key(l.codigo)] || {};
+  const k      = custosPorCerveja()[key(l.codigo)] || { total:0, itens:[], volume:0, porLitro:null };
+  const precoL = PARAM['PRECO MEDIO LITRO'] || 0;
+  const custoLote = k.porLitro != null ? k.porLitro * l.volume : null;
+  const mg     = (k.porLitro != null && precoL) ? (precoL - k.porLitro) / precoL * 100 : null;
+  const agora  = new Date();
+
+  document.getElementById('loteDetTitulo').textContent = `${l.nome} · ${l.lote}`;
+  document.getElementById('loteDetSub').innerHTML =
+    `${esc(l.codigo)}${l.estilo ? ' · ' + esc(l.estilo) : ''}`
+    + `${l.abv != null ? ' · ' + fmtNum(l.abv,1) + '% ABV' : ''}`
+    + `${cv.ibu != null ? ' · ' + fmtNum(cv.ibu,0) + ' IBU' : ''}`
+    + ` · Tanque <b>${esc(l.tanque || '—')}</b> · ${fmtNum(l.volume)} L &nbsp; ${selo(l.codigo)}`;
+
+  document.getElementById('loteDetKpis').innerHTML = [
+    ['Etapa atual', l.etapaAtual ? esc(l.etapaAtual.rotulo) : (l.concluido ? 'Finalizado' : 'Não iniciado')],
+    ['Envase previsto', fmtDate(l.fim)],
+    ['Faltam', l.diasRestantes != null ? l.diasRestantes + ' dias' : '—'],
+    ['Custo do lote', custoLote != null ? fmtBRL(custoLote) : '—'],
+    ['Custo por litro', k.porLitro != null ? fmtBRL(k.porLitro) : '—'],
+    ['Margem s/ insumos', mg == null ? '—' : fmtPct(mg)],
+  ].map(([lb,v]) => `<div class="comp-kpi"><div class="label">${lb}</div><div class="value">${v}</div></div>`).join('');
+
+  /* cronograma */
+  document.getElementById('loteDetCron').innerHTML =
+    `<table><thead><tr>${['Etapa','Início','Fim','Duração','Situação']
+      .map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`
+    + l.cron.map(e => {
+        const cor = ETAPA_COR[e.etapa] || 'var(--txt3)';
+        let sit = '<span class="badge mute">A fazer</span>';
+        if (e.ini && e.fim){
+          if (agora >= e.fim) sit = '<span class="badge ok">Concluída</span>';
+          else if (agora >= e.ini) sit = '<span class="badge info">Em andamento</span>';
+        }
+        return `<tr>
+          <td><span class="stage-dot" style="display:inline-block;background:${cor};margin-right:6px"></span>${esc(e.rotulo)}</td>
+          <td>${fmtDate(e.ini)}</td><td>${fmtDate(e.fim)}</td>
+          <td>${e.dias < 1 ? Math.round(e.dias*24) + ' h' : fmtNum(e.dias,1) + ' dias'}</td>
+          <td>${sit}</td></tr>`;
+      }).join('')
+    + `<tr class="total"><td>Total</td><td>${fmtDate(l.inicio)}</td><td>${fmtDate(l.fim)}</td>`
+    + `<td>${fmtNum(l.totalDias,1)} dias</td><td>libera o tanque ${fmtDate(l.tanqueFim)}</td></tr>`
+    + `</tbody></table>`;
+
+  /* custeio */
+  document.getElementById('loteDetCusto').innerHTML = k.itens.length
+    ? blocosComposicao(k, l.volume)
+    : `<p class="hint" style="color:var(--red)">Esta cerveja ainda não tem ficha de composição custeada.</p>`
+      + (podeEditar ? `<button class="btn btn-primary" onclick="closeModal('loteDetOverlay');abrirComposicao('${esc(l.codigo)}')">Custear agora</button>` : '');
+
+  document.getElementById('loteDetOverlay').classList.add('open');
+}
+
 /* ------------------------- FICHA DE COMPOSIÇÃO -------------------------
    Uma janela por produto: lista os insumos agrupados por classificação,
    com custo total, participação de cada item e custo por litro. Em modo
@@ -1806,6 +2006,65 @@ function limparFormInsumo(){
   if (e) e.style.display = 'none';
 }
 
+/** Cor fixa por classificação de insumo (paleta categórica validada). */
+const CLASSE_COR = {};
+function corClasse(nome){
+  const k = key(nome) || 'OUTROS';
+  if (!CLASSE_COR[k]){
+    const usadas = Object.keys(CLASSE_COR).length;
+    CLASSE_COR[k] = ETAPA_FALLBACK[usadas % ETAPA_FALLBACK.length];
+  }
+  return CLASSE_COR[k];
+}
+
+/** Blocos separados por classificação (malte, lúpulo, levedura, …). */
+function blocosComposicao(k, volume, editavel){
+  const grupos = {};
+  k.itens.forEach(it => (grupos[key(it.classe) || 'OUTROS'] = grupos[key(it.classe) || 'OUTROS'] || []).push(it));
+  const ordem = Object.keys(grupos).sort((a,b) =>
+    grupos[b].reduce((s,i)=>s+i.custo,0) - grupos[a].reduce((s,i)=>s+i.custo,0));
+
+  const blocos = ordem.map(g => {
+    const itens = grupos[g];
+    const sub = itens.reduce((s,i) => s + i.custo, 0);
+    const pctG = k.total ? sub / k.total * 100 : 0;
+    return `<div class="bloco">
+      <div class="bloco-head">
+        <span class="bloco-tag" style="background:${corClasse(g)}"></span>
+        <span class="bloco-nome">${esc(g)}</span>
+        <span style="color:var(--txt3);font-size:11.5px">${itens.length} ${itens.length === 1 ? 'item' : 'itens'}</span>
+        <span class="bloco-tot">${fmtBRL(sub)}</span>
+        <span class="bloco-pct">${fmtPct(pctG)}</span>
+      </div>
+      <table><thead><tr>
+        <th>Insumo</th><th class="num">Qtd</th><th class="num">Unid.</th>
+        <th class="num">Custo unit.</th><th class="num">Custo total</th>
+        ${volume ? '<th class="num">R$/L</th>' : ''}
+        ${editavel ? '<th></th>' : ''}
+      </tr></thead><tbody>
+      ${itens.map(it => `<tr>
+        <td><b>${esc(it.insumo)}</b></td>
+        <td class="num">${fmtNum(it.qtd, it.qtd % 1 ? 2 : 0)}</td>
+        <td class="num">${esc(it.unid)}</td>
+        <td class="num">${fmtBRL(it.custoUnit)}</td>
+        <td class="num">${fmtBRL(it.custo)}</td>
+        ${volume ? `<td class="num">${fmtBRL(it.custo / volume)}</td>` : ''}
+        ${editavel ? `<td style="white-space:nowrap">
+            <button class="btn icon-btn" title="Editar" onclick="editarInsumo(${it._row})">✏️</button>
+            <button class="btn icon-btn" title="Remover" onclick="removerInsumo(${it._row},'${esc(it.insumo)}')">🗑</button>
+          </td>` : ''}
+      </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  }).join('');
+
+  return blocos + `<div class="bloco"><div class="bloco-head" style="background:var(--panel3)">
+      <span class="bloco-nome">Total da ficha</span>
+      <span class="bloco-tot" style="font-size:14px">${fmtBRL(k.total)}</span>
+      <span class="bloco-pct">100,0%</span>
+    </div></div>`;
+}
+
 function renderComposicao(){
   const c  = COMP_COD;
   const cv = CERVEJA[c] || {};
@@ -1818,7 +2077,8 @@ function renderComposicao(){
     `${esc(c)}${cv.estilo ? ' · ' + esc(cv.estilo) : ''}`
     + `${cv.abv != null ? ' · ' + fmtNum(cv.abv,1) + '% ABV' : ''}`
     + ` — volume de referência ${k.volume ? fmtNum(k.volume) + ' L' : 'não definido'}`
-    + ` <span style="color:var(--txt3)">(${esc(k.origemVolume || '—')})</span>`;
+    + ` <span style="color:var(--txt3)">(${esc(k.origemVolume || '—')})</span>`
+    + ` &nbsp; ${selo(c)}`;
 
   document.getElementById('compKpis').innerHTML = [
     ['Itens na ficha', String(k.itens.length)],
@@ -1828,49 +2088,10 @@ function renderComposicao(){
     ['Margem s/ insumos', mg == null ? '—' : fmtPct(mg)],
   ].map(([l,v]) => `<div class="comp-kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
 
-  document.getElementById('thComp').innerHTML =
-    ['Insumo','Qtd','Unid.','Custo unit.','Custo total','% do custo']
-    .map((h,i) => `<th${i>=1?' class="num"':''}>${h}</th>`).join('')
-    + (podeEditar ? '<th></th>' : '');
-
-  const grupos = {};
-  k.itens.forEach(it => (grupos[it.classe || 'OUTROS'] = grupos[it.classe || 'OUTROS'] || []).push(it));
-  const ordem = Object.keys(grupos).sort((a,b) =>
-    grupos[b].reduce((s,i)=>s+i.custo,0) - grupos[a].reduce((s,i)=>s+i.custo,0));
-  const nCols = 6 + (podeEditar ? 1 : 0);
-
-  let html = '';
-  ordem.forEach(g => {
-    const itens = grupos[g];
-    const sub = itens.reduce((s,i) => s + i.custo, 0);
-    html += `<tr class="grupo-lbl"><td colspan="${nCols - 2}">${esc(g)}</td>`
-          + `<td class="num">${fmtBRL(sub)}</td>`
-          + `<td class="num">${k.total ? fmtPct(sub/k.total*100) : '—'}</td>`
-          + (podeEditar ? '<td></td>' : '') + `</tr>`;
-    itens.forEach(it => {
-      const pct = k.total ? it.custo / k.total * 100 : 0;
-      html += `<tr>
-        <td><b>${esc(it.insumo)}</b>
-          <div class="barra-custo" style="width:${Math.max(2, pct)}%;margin-top:4px"></div></td>
-        <td class="num">${fmtNum(it.qtd, it.qtd % 1 ? 2 : 0)}</td>
-        <td class="num">${esc(it.unid)}</td>
-        <td class="num">${fmtBRL(it.custoUnit)}</td>
-        <td class="num">${fmtBRL(it.custo)}</td>
-        <td class="num">${fmtPct(pct)}</td>
-        ${podeEditar ? `<td style="white-space:nowrap">
-            <button class="btn icon-btn" title="Editar" onclick="editarInsumo(${it._row})">✏️</button>
-            <button class="btn icon-btn" title="Remover" onclick="removerInsumo(${it._row},'${esc(it.insumo)}')">🗑</button>
-          </td>` : ''}
-      </tr>`;
-    });
-  });
-  if (!k.itens.length)
-    html = `<tr><td class="empty" colspan="${nCols}">Nenhum insumo cadastrado para este produto${podeEditar ? ' — adicione abaixo.' : '.'}</td></tr>`;
-  else
-    html += `<tr class="total"><td>Total da ficha</td><td colspan="3"></td>`
-          + `<td class="num">${fmtBRL(k.total)}</td><td class="num">100,0%</td>`
-          + (podeEditar ? '<td></td>' : '') + `</tr>`;
-  document.querySelector('#tblComp tbody').innerHTML = html;
+  document.getElementById('compBlocos').innerHTML = k.itens.length
+    ? blocosComposicao(k, k.volume, podeEditar)
+    : `<p class="hint" style="color:var(--red);padding:6px 2px">
+         Nenhum insumo cadastrado para esta cerveja${podeEditar ? ' — adicione abaixo para custeá-la.' : '.'}</p>`;
 
   const form = document.getElementById('compForm');
   form.style.display = podeEditar ? '' : 'none';
@@ -1950,46 +2171,25 @@ async function removerInsumo(row, nome){
   }
 }
 
-/* ---------- Nova ficha (cadastro do produto) ---------- */
-function novaFicha(){
-  const n = Object.keys(CERVEJA).length + 1;
-  document.getElementById('produtoForm').innerHTML = [
-    campo('Codigo','text', 'GZR' + String(n).padStart(3,'0')),
-    campo('Nome da Cerveja','text',''),
-    campo('Estilo','text',''),
-    campo('ABV%','number',''),
-    campo('IBU','number',''),
-    campo('Volume Padrao (L)','number',''),
-    campo('Cor','text','#d9a12b'),
-    campo('Ativo','select','SIM',['SIM','NAO']),
-  ].join('');
-  document.getElementById('produtoOverlay').classList.add('open');
-}
-
-async function salvarProduto(){
-  if (!podeEditar) return toast('Sua conta não tem permissão de edição.', false);
-  const form = document.getElementById('produtoForm');
-  const get = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
-  const cod = get('Codigo').toUpperCase();
-  if (!cod) return toast('Informe o código do produto.', false);
-  if (!get('Nome da Cerveja')) return toast('Informe o nome da cerveja.', false);
-  if (CERVEJA[key(cod)]) return toast('Já existe um produto com esse código.', false);
-
-  const valores = COLS_CERVEJA.map(c =>
-    ['ABV%','IBU','Volume Padrao (L)'].includes(c) ? numOut(get(c)) : (c === 'Codigo' ? cod : get(c)));
-  const btn = document.getElementById('produtoSaveBtn');
-  btn.disabled = true; btn.textContent = 'Criando…';
-  try {
-    await appendRow(TABS.cervejas.name, valores);
-    toast('Ficha criada. Agora adicione os insumos.', true);
-    closeModal('produtoOverlay');
-    await refresh();
-    abrirComposicao(cod);
-  } catch(e){
-    toast('Erro ao criar a ficha: ' + e.message, false);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Criar ficha';
-  }
+/* ---------- Escolher a cerveja para custear ---------- */
+function escolherParaCustear(){
+  const custos = custosPorCerveja();
+  const codigos = Object.keys(custos).sort((a,b) => {
+    const ka = custos[a].itens.length > 0, kb = custos[b].itens.length > 0;
+    return (ka === kb) ? a.localeCompare(b) : (ka ? 1 : -1);   // sem custeio primeiro
+  });
+  document.getElementById('insumoPickLista').innerHTML = codigos.map(c => {
+    const cv = CERVEJA[c] || {};
+    const ok = custos[c].itens.length > 0 && custos[c].total > 0;
+    return `<div class="acesso-item">
+      <span class="acesso-mail" style="${ok ? '' : 'color:var(--red)'}">
+        <b>${esc(cv.nome || c)}</b><small>${esc(c)}${cv.estilo ? ' · ' + esc(cv.estilo) : ''}</small></span>
+      ${selo(c)}
+      <button class="btn icon-btn" onclick="closeModal('insumoPickOverlay');abrirComposicao('${esc(c)}')">
+        ${ok ? 'Abrir' : 'Custear'}</button>
+    </div>`;
+  }).join('') || '<p class="hint">Nenhuma cerveja cadastrada ainda. Crie um lote num tanque que ela aparece aqui.</p>';
+  document.getElementById('insumoPickOverlay').classList.add('open');
 }
 
 /* ------------------------- AUTENTICAÇÃO -------------------------
