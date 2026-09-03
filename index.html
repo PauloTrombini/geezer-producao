@@ -1075,7 +1075,9 @@ function custosPorCerveja(){
     const v = (CERVEJA[c] && CERVEJA[c].volumePadrao) || volLote[c] || 0;
     out[c].volume = v;
     out[c].origemVolume = (CERVEJA[c] && CERVEJA[c].volumePadrao) ? 'padrão' : (volLote[c] ? 'maior lote' : '—');
-    out[c].porLitro = v > 0 ? out[c].total / v : null;
+    // Sem insumo lançado não existe custo por litro — devolver 0 faria a
+    // margem aparecer como 100%, que é pior que não mostrar nada.
+    out[c].porLitro = (v > 0 && out[c].itens.length && out[c].total > 0) ? out[c].total / v : null;
   });
   return out;
 }
