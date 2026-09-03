@@ -381,7 +381,7 @@
   <button data-view="v-timeline">Timeline</button>
   <button data-view="v-producao">Produção</button>
   <button data-view="v-receitas">Receitas &amp; Custos</button>
-  <button data-view="v-financeiro">Financeiro</button>
+  <button data-view="v-financeiro" id="navFin" style="display:none">Financeiro</button>
 </nav>
 
 <main>
@@ -656,7 +656,8 @@
 <div class="overlay" id="acessosOverlay">
   <div class="modal">
     <h3>Gerenciar acessos</h3>
-    <div class="modal-sub">Quem pode abrir este painel. <b>Editor</b> vê tudo e lança dados; <b>Leitor</b> só consulta.</div>
+    <div class="modal-sub">Quem pode abrir este painel. <b>Editor</b> vê tudo e lança dados; <b>Leitor</b> só consulta.
+      O <b>Financeiro</b> é uma planilha separada — só quem estiver marcado aqui recebe acesso a ela.</div>
     <div id="acessosLista"></div>
     <hr class="sep">
     <div class="add-row">
@@ -666,6 +667,7 @@
         <select id="acPapel"><option value="writer">Editor</option><option value="reader">Leitor</option></select></div>
       <button type="button" class="btn btn-primary" id="acAddBtn" onclick="adicionarAcesso()">Liberar</button>
     </div>
+    <label class="check"><input type="checkbox" id="acFin"> Também pode ver o <b>Financeiro</b></label>
     <label class="check"><input type="checkbox" id="acAvisar" checked> Avisar a pessoa por e-mail</label>
     <div class="modal-actions">
       <a class="btn" id="acFallback" target="_blank" rel="noopener" style="text-decoration:none;">Abrir compartilhamento no Google</a>
@@ -687,8 +689,13 @@
 
 /* ------------------------- CONFIG ------------------------- */
 const SHEET_ID  = '1PysLxO4MFOk_k1R8neUzIwqNszxE3SxcGH-ofh7eXn4';
+/* O financeiro mora numa SEGUNDA planilha, compartilhada só com quem pode vê-lo.
+   Quem não tem acesso a ela recebe 403 do próprio Google e a aba some do painel —
+   a proteção é do Google, não do HTML.                                            */
+const SHEET_FIN = '1wWClP0Oymbdr2jY8fJ8xgF8dPV46fdbDIQrj9sS41Uw';
 const CLIENT_ID = '446804769711-9d2f71d7mf1q464o0ffcu08prkldka32.apps.googleusercontent.com';
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets '
+                + 'https://www.googleapis.com/auth/userinfo.email';
 
 const TABS = {
   producao:   { name:'Producao',          gid:'0'          },
@@ -698,9 +705,16 @@ const TABS = {
   leadtime:   { name:'Receitas_Etapas',   gid:'734001869'  },
   insumos:    { name:'Receitas_Insumos',  gid:'2050542506' },
   listas:     { name:'Listas',            gid:'1687872916' },
-  plano:      { name:'Fin_PlanoContas',   gid:'1271583575' },
-  lancamentos:{ name:'Fin_Lancamentos',   gid:'1598248602' },
-  parametros: { name:'Fin_Parametros',    gid:'1861062212' },
+  parametros: { name:'Parametros'                          },
+  usuarios:   { name:'Usuarios'                            },
+};
+
+/* Abas da planilha financeira. As chaves continuam as mesmas que o resto do
+   código já usa (DB.plano, DB.lancamentos, DB.finparam). */
+const TABS_FIN = {
+  plano:      { name:'Fin_PlanoContas'  },
+  lancamentos:{ name:'Fin_Lancamentos'  },
+  finparam:   { name:'Fin_Parametros'   },
 };
 
 // Ordem das colunas ao gravar uma linha nova/editada (tem que bater com a planilha)
@@ -720,6 +734,9 @@ let accessToken = null, tokenClient = null;
 let podeEditar = false;          // a conta que entrou tem permissao de escrita na planilha?
 let tokenAcessos = null;         // token com escopo extra do Drive (so para gerenciar acessos)
 let avisouLeitura = false;       // ja avisou que a conta e somente leitura?
+let usuarioEmail = '';           // e-mail da conta que entrou
+let temFinanceiro = false;       // a conta consegue ler a planilha financeira?
+let motivoSemFin  = '';          // por que nao ve o financeiro (para diagnostico do admin)
 const DB = {};                 // DB.producao, DB.tanques, ... (arrays de objetos)
 let LOTES = [];                // lotes com cronograma calculado
 let ETAPA_ORDEM = [];          // [{etapa, ordem, ocupa, dur, unid, cor}]
@@ -865,18 +882,18 @@ async function apiFetch(url, opts){
   }
   return r.json();
 }
-function appendRow(tabName, values){
+function appendRow(tabName, values, planilha){
   return apiFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(tabName)}:append`
+    `https://sheets.googleapis.com/v4/spreadsheets/${planilha || SHEET_ID}/values/${encodeURIComponent(tabName)}:append`
       + `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method:'POST',
       headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
       body: JSON.stringify({ values:[values] }) });
 }
-function updateRow(tabName, rowNum, values){
+function updateRow(tabName, rowNum, values, planilha){
   const lastCol = colLetter(values.length);
   return apiFetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/`
+    `https://sheets.googleapis.com/v4/spreadsheets/${planilha || SHEET_ID}/values/`
       + `${encodeURIComponent(tabName)}!A${rowNum}:${lastCol}${rowNum}?valueInputOption=USER_ENTERED`,
     { method:'PUT',
       headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
@@ -974,11 +991,35 @@ function buildApoio(){
     };
   });
 
+  /* Os parâmetros vêm de duas planilhas: os de produção ficam na principal
+     (todos precisam deles) e os financeiros na restrita. */
   PARAM = {};
-  (DB.parametros || []).forEach(r => {
+  [...(DB.parametros || []), ...(DB.finparam || [])].forEach(r => {
     const p = key(r['Parametro']);
     if (p) PARAM[p] = num(r['Valor']);
   });
+}
+
+/* ---------- Perfis de acesso (aba Usuarios da planilha principal) ----------
+   Esta aba é a lista que o administrador enxerga e edita. Ela NÃO é o que
+   protege o dado — quem protege é o compartilhamento da planilha financeira.
+   Serve para deixar a intenção explícita e para o painel avisar quando a
+   pessoa está marcada como sem financeiro.                                   */
+function perfilDoUsuario(email){
+  const e = key(email);
+  if (!e) return null;
+  return (DB.usuarios || []).find(r => key(r['Email']) === e) || null;
+}
+
+/** SIM/NAO da coluna "Ve Financeiro"; null quando a pessoa não está na lista. */
+function marcadoParaFinanceiro(email){
+  const u = perfilDoUsuario(email);
+  if (!u) return null;
+  if (key(u['Ativo']) === 'NAO') return false;
+  const v = key(u['Ve Financeiro']);
+  if (v === 'SIM') return true;
+  if (v === 'NAO') return false;
+  return ['ADMIN','FINANCEIRO'].includes(key(u['Perfil'])) ? true : null;
 }
 
 /** Receita de etapas de um código: [{etapa, dias, ocupa, rotulo}] na ordem do processo. */
@@ -2194,8 +2235,8 @@ async function submitLanc(){
   const btn = document.getElementById('lancSaveBtn');
   btn.disabled = true; btn.textContent = 'Salvando…';
   try {
-    if (row) await updateRow(TABS.lancamentos.name, row, values);
-    else     await appendRow(TABS.lancamentos.name, values);
+    if (row) await updateRow(TABS_FIN.lancamentos.name, row, values, SHEET_FIN);
+    else     await appendRow(TABS_FIN.lancamentos.name, values, SHEET_FIN);
     toast(row ? 'Lançamento atualizado.' : 'Lançamento criado.', true);
     closeModal('lancOverlay');
     await refresh();
@@ -2491,11 +2532,23 @@ function applyEditingUI(){
   badge.className   = (logado && podeEditar) ? 'badge-edit' : 'badge-readonly';
   document.getElementById('authBtn').textContent = logado ? 'Sair' : 'Entrar com Google';
 
-  ['newLoteBtn','newLancBtn','acessosBtn','sheetBtn'].forEach(id => {
+  ['newLoteBtn','acessosBtn','sheetBtn'].forEach(id => {
     document.getElementById(id).style.display = (logado && podeEditar) ? '' : 'none';
   });
+  // Lançar no financeiro só faz sentido para quem enxerga o financeiro.
+  document.getElementById('newLancBtn').style.display =
+    (logado && podeEditar && temFinanceiro) ? '' : 'none';
   document.getElementById('sheetBtn').href = URL_PLANILHA;
   document.getElementById('acFallback').href = URL_PLANILHA;
+}
+
+/** Descobre qual conta entrou — é ela que a aba Usuarios identifica. */
+async function identificarUsuario(){
+  usuarioEmail = '';
+  try {
+    const j = await apiGet('https://www.googleapis.com/oauth2/v3/userinfo');
+    usuarioEmail = norm(j.email);
+  } catch(e){ console.warn('Não foi possível identificar a conta:', e.message); }
 }
 
 function gateMsg(texto, erro){
@@ -2516,9 +2569,11 @@ function initGis(){
       }
       accessToken = resp.access_token;
       gateMsg('Carregando os dados…');
+      await identificarUsuario();
       await verificarPermissaoEdicao();
       applyEditingUI();
       await refresh();
+      applyEditingUI();          // o botão de lançamento depende do financeiro
     },
   });
 }
@@ -2527,6 +2582,7 @@ function handleAuthClick(){
   if (accessToken){
     google.accounts.oauth2.revoke(accessToken, () => {});
     accessToken = null; tokenAcessos = null; podeEditar = false;
+    usuarioEmail = ''; temFinanceiro = false; aplicarAcessoFinanceiro();
     Object.keys(DB).forEach(k => delete DB[k]);
     LOTES = [];
     applyEditingUI();
@@ -2605,28 +2661,55 @@ function falhaAcessos(msg){
 }
 
 const PAPEL = { owner:'Proprietário', writer:'Editor', reader:'Leitor', commenter:'Comentarista' };
+let ACESSO_FIN = {};   // { EMAIL: {id, role} } — quem tem acesso à planilha financeira
+
+function permissoesDe(id){
+  return apiGet(
+    `https://www.googleapis.com/drive/v3/files/${id}/permissions`
+    + `?fields=permissions(id,type,role,emailAddress,displayName)&supportsAllDrives=true`,
+    tokenAcessos);
+}
 
 async function listarAcessos(){
   const box = document.getElementById('acessosLista');
   box.innerHTML = '<p class="hint">Carregando…</p>';
   try {
-    const j = await apiGet(
-      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions`
-      + `?fields=permissions(id,type,role,emailAddress,displayName)&supportsAllDrives=true`,
-      tokenAcessos);
-    const ps = (j.permissions || []).filter(p => p.type === 'user' || p.type === 'anyone');
-    box.innerHTML = ps.length ? ps.map(p => {
+    const [jp, jf] = await Promise.all([
+      permissoesDe(SHEET_ID),
+      permissoesDe(SHEET_FIN).catch(() => ({ permissions: null })),
+    ]);
+    /* Mapa e-mail → id da permissão na planilha financeira, para saber quem
+       já vê o financeiro e para conseguir revogar depois. */
+    ACESSO_FIN = {};
+    const finOk = Array.isArray(jf.permissions);
+    if (finOk) jf.permissions.forEach(p => {
+      if (p.emailAddress) ACESSO_FIN[key(p.emailAddress)] = { id:p.id, role:p.role };
+    });
+
+    const ps = (jp.permissions || []).filter(p => p.type === 'user' || p.type === 'anyone');
+    box.innerHTML = (ps.length ? ps.map(p => {
       const dono = p.role === 'owner';
       const nome = p.type === 'anyone'
         ? 'Qualquer pessoa com o link'
         : (p.emailAddress || p.displayName || '—');
+      const fin = p.emailAddress && ACESSO_FIN[key(p.emailAddress)];
+      const selo = !finOk ? ''
+        : (dono || fin) ? '<span class="badge ok">financeiro</span>'
+                        : '<span class="badge mute">sem financeiro</span>';
+      const btnFin = (dono || !p.emailAddress || !finOk) ? '' :
+        `<button class="btn icon-btn" onclick="alternarFinanceiro('${esc(p.emailAddress)}',${fin ? 'true' : 'false'},'${esc(p.role)}')">`
+        + `${fin ? 'Tirar financeiro' : 'Dar financeiro'}</button>`;
       return `<div class="acesso-item">
         <span class="acesso-mail">${esc(nome)}<small>${esc(PAPEL[p.role] || p.role)}</small></span>
+        ${selo}
+        ${btnFin}
         ${dono ? '<span class="badge mute">dono</span>'
                : `<button class="btn icon-btn" title="Remover acesso"
-                    onclick="removerAcesso('${esc(p.id)}','${esc(nome)}')">Remover</button>`}
+                    onclick="removerAcesso('${esc(p.id)}','${esc(nome)}','${esc(p.emailAddress || '')}')">Remover</button>`}
       </div>`;
-    }).join('') : '<p class="hint">Só você tem acesso.</p>';
+    }).join('') : '<p class="hint">Só você tem acesso.</p>')
+    + (finOk ? '' : '<p class="hint" style="color:var(--amber)">Não consegui ler o compartilhamento '
+        + 'da planilha financeira — o controle de financeiro fica indisponível nesta janela.</p>');
   } catch(e){
     falhaAcessos(e.status === 403
       ? 'Sua conta não tem permissão para gerenciar o compartilhamento desta planilha.'
@@ -2644,18 +2727,17 @@ async function adicionarAcesso(){
     return falhaAcessos('A permissão para gerenciar o compartilhamento não foi concedida.');
   }
 
+  const comFin = document.getElementById('acFin').checked;
   const btn = document.getElementById('acAddBtn');
   btn.disabled = true; btn.textContent = 'Liberando…';
   try {
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions`
-      + `?sendNotificationEmail=${avisar}&supportsAllDrives=true`,
-      { method:'POST',
-        headers:{ Authorization:`Bearer ${tokenAcessos}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ type:'user', role:papel, emailAddress:email }) });
-    if (!r.ok) throw new Error(await mensagemErro(r));
+    await criarPermissao(SHEET_ID, email, papel, avisar);
+    if (comFin) await criarPermissao(SHEET_FIN, email, papel, avisar);
+    await registrarUsuario(email, papel, comFin);
     document.getElementById('acEmail').value = '';
-    toast(`Acesso de ${PAPEL[papel]} liberado para ${email}.`, true);
+    document.getElementById('acFin').checked = false;
+    toast(`Acesso de ${PAPEL[papel]} liberado para ${email}`
+        + (comFin ? ', incluindo o financeiro.' : ' (sem o financeiro).'), true);
     listarAcessos();
   } catch(e){
     toast('Não foi possível liberar: ' + e.message, false);
@@ -2664,18 +2746,84 @@ async function adicionarAcesso(){
   }
 }
 
-async function removerAcesso(id, nome){
+async function criarPermissao(planilha, email, papel, avisar){
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${planilha}/permissions`
+    + `?sendNotificationEmail=${avisar}&supportsAllDrives=true`,
+    { method:'POST',
+      headers:{ Authorization:`Bearer ${tokenAcessos}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ type:'user', role:papel, emailAddress:email }) });
+  if (!r.ok) throw new Error(await mensagemErro(r));
+}
+
+async function apagarPermissao(planilha, id){
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${planilha}/permissions/${encodeURIComponent(id)}`
+    + `?supportsAllDrives=true`,
+    { method:'DELETE', headers:{ Authorization:`Bearer ${tokenAcessos}` } });
+  if (!r.ok) throw new Error(await mensagemErro(r));
+}
+
+/** Liga/desliga o financeiro de alguém que já tem acesso ao painel. */
+async function alternarFinanceiro(email, tem, papel){
   if (!tokenAcessos) return;
   try {
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${SHEET_ID}/permissions/${encodeURIComponent(id)}`
-      + `?supportsAllDrives=true`,
-      { method:'DELETE', headers:{ Authorization:`Bearer ${tokenAcessos}` } });
-    if (!r.ok) throw new Error(await mensagemErro(r));
+    if (tem){
+      const p = ACESSO_FIN[key(email)];
+      if (p) await apagarPermissao(SHEET_FIN, p.id);
+      await registrarUsuario(email, null, false);
+      toast(`${email} não vê mais o financeiro.`, true);
+    } else {
+      // no financeiro a pessoa entra com o mesmo papel que tem no painel
+      await criarPermissao(SHEET_FIN, email, papel === 'reader' ? 'reader' : 'writer',
+        document.getElementById('acAvisar').checked);
+      await registrarUsuario(email, null, true);
+      toast(`${email} passou a ver o financeiro.`, true);
+    }
+    listarAcessos();
+  } catch(e){
+    toast('Não foi possível alterar o financeiro: ' + e.message, false);
+  }
+}
+
+async function removerAcesso(id, nome, email){
+  if (!tokenAcessos) return;
+  try {
+    await apagarPermissao(SHEET_ID, id);
+    const p = email && ACESSO_FIN[key(email)];
+    if (p) await apagarPermissao(SHEET_FIN, p.id);       // sai das duas planilhas
+    if (email) await registrarUsuario(email, null, false, 'NAO');
     toast(`Acesso removido: ${nome}.`, true);
     listarAcessos();
   } catch(e){
     toast('Não foi possível remover: ' + e.message, false);
+  }
+}
+
+/* Espelha a decisão na aba Usuarios, que é a lista que o administrador lê.
+   Falha aqui não é motivo para desfazer o compartilhamento: quem manda é o
+   Google, isto é só o registro legível.                                     */
+const COLS_USUARIO = ['Email','Nome','Perfil','Ve Financeiro','Ativo'];
+
+async function registrarUsuario(email, papel, veFin, ativo){
+  try {
+    const atual = perfilDoUsuario(email);
+    const perfil = papel === 'reader' ? 'LEITOR'
+                 : papel === 'writer' ? (veFin ? 'FINANCEIRO' : 'PRODUCAO')
+                 : (atual && norm(atual['Perfil'])) || (veFin ? 'FINANCEIRO' : 'PRODUCAO');
+    const linha = [
+      email,
+      atual ? norm(atual['Nome']) : '',
+      perfil,
+      veFin ? 'SIM' : 'NAO',
+      ativo || 'SIM',
+    ];
+    if (atual) await updateRow(TABS.usuarios.name, atual._row, linha);
+    else       await appendRow(TABS.usuarios.name, linha);
+    DB.usuarios = null;                    // força releitura no próximo refresh
+    await refresh();
+  } catch(e){
+    console.warn('Não consegui atualizar a aba Usuarios:', e.message);
   }
 }
 
@@ -2703,26 +2851,72 @@ function renderTudo(){
   renderTimeline();
   renderProducao();
   renderReceitas();
-  renderFinanceiro();
+  aplicarAcessoFinanceiro();
+  if (temFinanceiro) renderFinanceiro();
+}
+
+/** Mostra ou esconde a aba Financeiro — e tira o usuário de lá se estiver nela. */
+function aplicarAcessoFinanceiro(){
+  document.getElementById('navFin').style.display = temFinanceiro ? '' : 'none';
+  if (!temFinanceiro){
+    const vf = document.getElementById('v-financeiro');
+    if (vf.classList.contains('active')){
+      vf.classList.remove('active');
+      document.getElementById('v-tanques').classList.add('active');
+      document.querySelectorAll('#nav button').forEach(b =>
+        b.classList.toggle('active', b.dataset.view === 'v-tanques'));
+    }
+  }
+}
+
+/** Lê uma planilha inteira. Devolve null quando a conta não tem acesso a ela. */
+async function lerPlanilha(id, tabs){
+  const chaves = Object.keys(tabs);
+  const ranges = chaves.map(k => `ranges=${encodeURIComponent(tabs[k].name)}`).join('&');
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet`
+            + `?${ranges}&majorDimension=ROWS`
+            + `&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
+  const j = await apiGet(url);
+  const vr = j.valueRanges || [];
+  const out = {};
+  chaves.forEach((k, i) => { out[k] = tabelaDeValores(vr[i] && vr[i].values); });
+  return out;
+}
+
+/* Carrega o financeiro só se a conta puder. Duas barreiras, nesta ordem:
+   1) a lista Usuarios pode dizer explicitamente que a pessoa não vê;
+   2) o Google decide de fato — sem permissão na planilha financeira, 403.   */
+async function carregarFinanceiro(){
+  temFinanceiro = false; motivoSemFin = '';
+  ['plano','lancamentos','finparam'].forEach(k => delete DB[k]);
+
+  if (marcadoParaFinanceiro(usuarioEmail) === false){
+    motivoSemFin = 'marcado como sem financeiro na aba Usuarios';
+    return;
+  }
+  try {
+    Object.assign(DB, await lerPlanilha(SHEET_FIN, TABS_FIN));
+    temFinanceiro = true;
+  } catch (e){
+    motivoSemFin = (e.status === 403 || e.status === 404)
+      ? 'sem acesso à planilha financeira'
+      : ('erro ao ler o financeiro: ' + e.message);
+    if (e.status !== 403 && e.status !== 404) console.error(e);
+  }
 }
 
 async function refresh(){
   if (!accessToken) return;                       // sem login nao ha leitura
-  const chaves = Object.keys(TABS);
-  const ranges = chaves.map(k => `ranges=${encodeURIComponent(TABS[k].name)}`).join('&');
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet`
-            + `?${ranges}&majorDimension=ROWS`
-            + `&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`;
   try {
-    const j = await apiGet(url);
-    const vr = j.valueRanges || [];
-    chaves.forEach((k, i) => { DB[k] = tabelaDeValores(vr[i] && vr[i].values); });
+    Object.assign(DB, await lerPlanilha(SHEET_ID, TABS));
+    await carregarFinanceiro();
 
     renderTudo();
     document.body.classList.remove('locked');
     gateMsg('');
     document.getElementById('sourceLabel').textContent =
-      `${(DB.producao||[]).length} lotes · ${(DB.lancamentos||[]).length} lançamentos · `
+      `${(DB.producao||[]).length} lotes · `
+      + (temFinanceiro ? `${(DB.lancamentos||[]).length} lançamentos · ` : 'sem financeiro · ')
       + `${podeEditar ? 'edição liberada' : 'somente leitura nesta conta'} · `
       + `atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
     document.getElementById('statusDot').className = 'dot';
