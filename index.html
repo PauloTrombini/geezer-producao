@@ -389,6 +389,7 @@
   <button data-view="v-timeline">Timeline</button>
   <button data-view="v-producao">Produção</button>
   <button data-view="v-receitas">Receitas &amp; Custos</button>
+  <button data-view="v-tarefas">Tarefas</button>
   <button data-view="v-financeiro" id="navFin" style="display:none">Financeiro</button>
 </nav>
 
@@ -401,8 +402,10 @@
       <div class="panel-head">
         <div>
           <h2>Sala de fermentação</h2>
-          <p class="hint">O nível do desenho representa o volume do lote em relação à capacidade do tanque. O tanque fica ocupado da fermentação até o fim do envase.</p>
+          <p class="hint">O nível do desenho representa o volume do lote em relação à capacidade do tanque. O tanque fica ocupado da fermentação até o fim do envase — se o lote transfere, cada tanque aparece só pelo período que segura a cerveja.</p>
         </div>
+        <button class="btn btn-primary" id="novoTanqueBtn" style="display:none;"
+                onclick="openTanqueModal(0)">+ Fermentador</button>
       </div>
       <div class="tanks" id="tanks"></div>
       <div class="legend" id="legendEtapas"></div>
@@ -498,6 +501,37 @@
         <button class="btn btn-primary" id="novaFichaBtn" style="display:none;" onclick="escolherParaCustear()">Cadastrar insumos e custos</button>
       </div>
       <div class="table-scroll"><table id="tblFichas"><thead><tr id="thFichas"></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ============ TAREFAS ============ -->
+  <section class="view" id="v-tarefas">
+    <div class="kpis" id="kpiTarefas"></div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Tarefas em cobrança</h2>
+          <p class="hint">Sai do cronograma de cada lote e das pendências de custo, rótulo e divulgação.
+            É esta mesma lista que o robô do Telegram manda todo dia para cada responsável.</p>
+        </div>
+        <div class="filters" style="margin:0">
+          <label for="tfFuncao">Função</label>
+          <select id="tfFuncao" onchange="renderTarefas()"><option value="">Todas</option></select>
+          <label class="check" style="margin:0"><input type="checkbox" id="tfSoAtraso" onchange="renderTarefas()"> Só atrasadas</label>
+        </div>
+      </div>
+      <div class="table-scroll"><table id="tblTarefas"><thead><tr id="thTarefas"></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Responsáveis por função</h2>
+          <p class="hint">Cada função só entra na cobrança se tiver alguém ativo com o Chat ID do Telegram preenchido.</p>
+        </div>
+        <button class="btn btn-primary" id="novoRespBtn" style="display:none;" onclick="openRespModal(0)">+ Responsável</button>
+      </div>
+      <div class="table-scroll"><table id="tblResp"><thead><tr id="thResp"></tr></thead><tbody></tbody></table></div>
+      <p class="hint" id="respAviso" style="margin-top:12px"></p>
     </div>
   </section>
 
@@ -669,6 +703,32 @@
   </div>
 </div>
 
+<div class="overlay" id="tanqueOverlay">
+  <div class="modal">
+    <h3 id="tanqueTitle">Novo fermentador</h3>
+    <div class="modal-sub">Os tanques cadastrados aqui são os que aparecem na sala de fermentação e na timeline.</div>
+    <form id="tanqueForm" class="field-grid" onsubmit="return false;"></form>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="tanqueDelBtn" style="display:none"
+              onclick="excluirTanque()">Excluir</button>
+      <button type="button" class="btn" onclick="closeModal('tanqueOverlay')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="tanqueSaveBtn" onclick="submitTanque()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="respOverlay">
+  <div class="modal">
+    <h3 id="respTitle">Responsável</h3>
+    <div class="modal-sub">Quem recebe a cobrança desta função no Telegram.</div>
+    <form id="respForm" class="field-grid" onsubmit="return false;"></form>
+    <div class="modal-actions">
+      <button type="button" class="btn" onclick="closeModal('respOverlay')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="respSaveBtn" onclick="submitResp()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="acessosOverlay">
   <div class="modal">
     <h3>Gerenciar acessos</h3>
@@ -725,6 +785,7 @@ const TABS = {
   listas:     { name:'Listas',            gid:'1687872916' },
   parametros: { name:'Parametros'                          },
   usuarios:   { name:'Usuarios'                            },
+  responsaveis:{ name:'Responsaveis'                       },
 };
 
 /* Abas da planilha financeira. As chaves continuam as mesmas que o resto do
@@ -737,7 +798,17 @@ const TABS_FIN = {
 
 // Ordem das colunas ao gravar uma linha nova/editada (tem que bater com a planilha)
 const COLS_PRODUCAO = ['Lote','Codigo','Nome da Cerveja','Estilo','ABV%','Tanque','Volume (L)',
-  'Data Inicial','Status','Rotulo','Material Divulgacao','Data Final Real','Observacoes'];
+  'Data Inicial','Status','Rotulo','Material Divulgacao','Data Final Real','Observacoes',
+  'Tanque Final','Transfere na Etapa'];
+const COLS_TANQUE = ['Tanque','Capacidade (L)','Tipo','Local','Status','Observacoes'];
+const COLS_RESP   = ['Funcao','Nome','Telegram Chat ID','Ativo','Observacoes'];
+
+/* Funções que recebem cobrança além das etapas do processo. */
+const FUNCOES_EXTRA = [
+  { funcao:'ESTUDO DE CUSTO', rotulo:'Estudo de custo' },
+  { funcao:'ROTULO',          rotulo:'Rótulo'          },
+  { funcao:'DIVULGACAO',      rotulo:'Divulgação'      },
+];
 const COLS_LANC = ['Data','Tipo','Conta','Centro de Custo','Descricao','Valor',
   'Vencimento','Data Pagamento','Status','Lote','Documento'];
 const COLS_INSUMO  = ['Codigo','Estilo','Insumo','Classificacao','Quantidade','Unidade','Custo Unitario'];
@@ -1100,6 +1171,25 @@ function buildLotes(){
       const tanqueIni = ocupa.length ? ocupa[0].ini : inicio;
       const tanqueFim = ocupa.length ? ocupa[ocupa.length-1].fim : fim;
 
+      /* Um lote pode terminar em outro fermentador. Quando há tanque final e
+         etapa de transferência, a ocupação vira dois trechos — cada tanque
+         fica preso só pelo período que realmente usa.                       */
+      const tanque      = key(r['Tanque']);
+      const tanqueFinal = key(r['Tanque Final']);
+      const transfEtapa = key(r['Transfere na Etapa']);
+      let ocupacoes = [];
+      if (tanque && ocupa.length){
+        const iT = transfEtapa ? ocupa.findIndex(e => e.etapa === transfEtapa) : -1;
+        if (tanqueFinal && iT > 0){
+          ocupacoes = [
+            { tanque,             ini: ocupa[0].ini,    fim: ocupa[iT-1].fim, etapas: ocupa.slice(0, iT), primeira:true  },
+            { tanque: tanqueFinal, ini: ocupa[iT].ini,  fim: tanqueFim,       etapas: ocupa.slice(iT),    primeira:false },
+          ];
+        } else {
+          ocupacoes = [{ tanque, ini: tanqueIni, fim: tanqueFim, etapas: ocupa, primeira:true }];
+        }
+      }
+
       // Etapa atual e progresso
       let etapaAtual = null, progresso = 0;
       if (inicio && fim){
@@ -1121,7 +1211,7 @@ function buildLotes(){
         nome:   norm(r['Nome da Cerveja']) || cerv.nome || '—',
         estilo: norm(r['Estilo']) || cerv.estilo || '',
         abv:    num(r['ABV%']) ?? cerv.abv,
-        tanque: key(r['Tanque']),
+        tanque, tanqueFinal, transfEtapa, ocupacoes,
         volume: num(r['Volume (L)']) ?? 0,
         inicio, fim, cron, totalDias, tanqueIni, tanqueFim,
         etapaAtual, progresso,
@@ -1145,26 +1235,31 @@ function estadoTanques(){
   const tanques = (DB.tanques || [])
     .filter(t => norm(t['Tanque']))
     .map(t => ({
+      _row: t._row,
       tanque: key(t['Tanque']),
       rotulo: norm(t['Tanque']),
       capacidade: num(t['Capacidade (L)']) ?? 0,
       tipo: norm(t['Tipo']),
       local: norm(t['Local']),
       status: key(t['Status']) || 'ATIVO',
-      atual: null, fila: [],
+      obs: norm(t['Observacoes']),
+      atual: null, atualOcup: null, fila: [],
     }));
   const idx = {};
   tanques.forEach(t => idx[t.tanque] = t);
 
+  /* Cada trecho de ocupação entra no seu próprio tanque — um lote que
+     transfere aparece nos dois fermentadores, nos períodos certos. */
   LOTES.forEach(l => {
-    if (l.cancelado || !l.tanque) return;
-    const t = idx[l.tanque];
-    if (!t) return;
-    const ini = l.tanqueIni, fim = l.tanqueFim;
-    if (ini && fim && agora >= ini && agora < fim) t.atual = l;
-    else if (ini && agora < ini)                    t.fila.push(l);
+    if (l.cancelado) return;
+    l.ocupacoes.forEach(o => {
+      const t = idx[o.tanque];
+      if (!t || !o.ini || !o.fim) return;
+      if (agora >= o.ini && agora < o.fim){ t.atual = l; t.atualOcup = o; }
+      else if (agora < o.ini)              t.fila.push({ lote:l, ocup:o });
+    });
   });
-  tanques.forEach(t => t.fila.sort((a,b) => a.tanqueIni - b.tanqueIni));
+  tanques.forEach(t => t.fila.sort((a,b) => a.ocup.ini - b.ocup.ini));
   return tanques;
 }
 
@@ -1209,6 +1304,34 @@ function custosPorCerveja(){
 function temCusteio(codigo){
   const k = custosPorCerveja()[key(codigo)];
   return !!(k && k.itens.length && k.total > 0);
+}
+
+/* ---------- Código único por cerveja ----------
+   O código é a chave que liga lote, ficha de custo e timeline. Se dois nomes
+   dividissem o mesmo código, o custeio de uma apareceria na outra.          */
+function nomesPorCodigo(){
+  const m = {};
+  Object.keys(CERVEJA).forEach(c => { const n = key(CERVEJA[c].nome); if (n) m[c] = n; });
+  (DB.producao || []).forEach(r => {
+    const c = key(r['Codigo']), n = key(r['Nome da Cerveja']);
+    if (c && n && !m[c]) m[c] = n;
+  });
+  return m;
+}
+
+/** Devolve a mensagem do problema, ou null se o par código/nome está livre. */
+function validarCodigo(cod, nome){
+  const c = key(cod), n = key(nome);
+  if (!c) return 'Informe o código da cerveja.';
+  if (!n) return 'Informe o nome da cerveja.';
+  const m = nomesPorCodigo();
+  if (m[c] && m[c] !== n)
+    return `O código ${cod} já é da cerveja ${m[c]}. Clique em "Gerar código novo" ou corrija o nome.`;
+  const outro = Object.keys(m).find(k => k !== c && m[k] === n);
+  if (outro)
+    return `A cerveja ${nome} já está cadastrada com o código ${outro}. Use esse código para ela — `
+         + `assim ela pode ocupar outro fermentador sem duplicar a ficha de custo.`;
+  return null;
 }
 
 /** Selo verde/vermelho de custeio. */
@@ -1312,15 +1435,19 @@ function renderTanques(){
     const cor = l ? l.cor : '#2b3760';
     // Cada cerveja da fila abre a mesma janela de detalhes do lote.
     const fila = t.fila.slice(0, 3).map(f => `
-      <button class="chip" onclick="abrirLote('${esc(f.lote)}')"
-              title="Ver cronograma, custeio e ficha de ${esc(f.nome)}">
-        <span class="sw" style="background:${f.cor}"></span>
-        <span class="nm">${esc(f.nome)}</span>
-        <span class="dt">${fmtDateShort(f.tanqueIni)}</span>
+      <button class="chip" onclick="abrirLote('${esc(f.lote.lote)}')"
+              title="Ver cronograma, custeio e ficha de ${esc(f.lote.nome)}">
+        <span class="sw" style="background:${f.lote.cor}"></span>
+        <span class="nm">${esc(f.lote.nome)}${f.ocup.primeira ? '' : ' ›'}</span>
+        <span class="dt">${fmtDateShort(f.ocup.ini)}</span>
       </button>`).join('');
 
     const btnNovo = podeEditar
-      ? `<div class="tank-actions"><button class="btn" onclick="openLoteModal(0,'${esc(t.rotulo)}')">+ Cerveja neste tanque</button></div>`
+      ? `<div class="tank-actions">
+           <button class="btn" onclick="openLoteModal(0,'${esc(t.rotulo)}')">+ Cerveja neste tanque</button>
+           <button class="btn icon-btn" title="Editar fermentador"
+                   onclick="openTanqueModal(${t._row})">✏️</button>
+         </div>`
       : '';
 
     if (!l){
@@ -1332,8 +1459,8 @@ function renderTanques(){
         <div class="tank-beer" style="color:var(--txt2)">Tanque livre</div>
         <div class="tank-meta">${esc(t.tipo || '—')}${t.local ? ' · ' + esc(t.local) : ''}</div>
         ${prox
-          ? `<button class="prox-btn" onclick="abrirLote('${esc(prox.lote)}')"
-               title="Ver cronograma, custeio e ficha de ${esc(prox.nome)}">Próxima: <b>${esc(prox.nome)}</b> em ${fmtDate(prox.tanqueIni)}</button>`
+          ? `<button class="prox-btn" onclick="abrirLote('${esc(prox.lote.lote)}')"
+               title="Ver cronograma, custeio e ficha de ${esc(prox.lote.nome)}">Próxima: <b>${esc(prox.lote.nome)}</b> em ${fmtDate(prox.ocup.ini)}</button>`
           : '<div class="tank-foot">Sem lote programado</div>'}
         ${fila ? `<div class="queue"><div class="queue-lbl">Fila</div>${fila}</div>` : ''}
         ${btnNovo}
@@ -1354,7 +1481,10 @@ function renderTanques(){
       ${pillEtapa(l.etapaAtual)}
       <div class="bar"><span style="width:${pct}%;background:${ETAPA_COR[l.etapaAtual?.etapa] || 'var(--accent)'}"></span></div>
       <div class="tank-foot">Envase previsto <b>${fmtDate(l.fim)}</b> · faltam <b>${l.diasRestantes ?? '—'} d</b></div>
-      <div class="tank-foot">Libera o tanque em <b>${fmtDate(l.tanqueFim)}</b></div>
+      <div class="tank-foot">Libera o tanque em <b>${fmtDate((t.atualOcup || l).fim || l.tanqueFim)}</b>${
+        t.atualOcup && !t.atualOcup.primeira
+          ? ` <span class="badge mute">veio do ${esc(l.tanque)}</span>`
+          : (l.tanqueFinal ? ` <span class="badge info">vai para o ${esc(l.tanqueFinal)}</span>` : '')}</div>
       ${fila ? `<div class="queue"><div class="queue-lbl">Próximas neste tanque</div>${fila}</div>` : ''}
       ${btnNovo}
     </div>`;
@@ -1403,28 +1533,40 @@ function renderTimeline(){
            + `<div class="tl-today-lbl" style="left:${xh}px">HOJE</div>${hojeLinha}</div></div>`;
 
   const tanques = estadoTanques();
-  const semTanque = LOTES.filter(l => !l.cancelado && !l.tanque);
+  const semTanque = LOTES.filter(l => !l.cancelado && !l.ocupacoes.length);
+
+  /* Uma barra por trecho de ocupação: se o lote transfere, ele desenha em
+     dois fermentadores, cada um só pelo tempo que segura a cerveja. */
   const linhas = tanques.map(t => ({
     rotulo: t.rotulo,
     sub: `${fmtNum(t.capacidade)} L`,
-    lotes: LOTES.filter(l => !l.cancelado && l.tanque === t.tanque),
+    trechos: LOTES.filter(l => !l.cancelado)
+      .flatMap(l => l.ocupacoes.filter(o => o.tanque === t.tanque).map(o => ({ lote:l, ocup:o }))),
   }));
-  if (semTanque.length) linhas.push({ rotulo:'Sem tanque', sub:'a alocar', lotes:semTanque });
+  if (semTanque.length) linhas.push({ rotulo:'Sem tanque', sub:'a alocar',
+    trechos: semTanque.map(l => ({ lote:l, ocup:null })) });
 
   linhas.forEach(linha => {
     let barras = '';
-    linha.lotes.forEach(l => {
-      if (!l.inicio || !l.fim || l.fim < ini || l.inicio > fim) return;
-      const x0 = x(l.inicio), largura = Math.max(6, x(l.fim) - x0);
-      const segs = l.cron.map(e => {
+    linha.trechos.forEach(({ lote:l, ocup }) => {
+      /* Na primeira ocupação a barra inclui as etapas anteriores (brassagem),
+         para o lote aparecer inteiro; na segunda, só o que roda ali. */
+      const etapas = !ocup ? l.cron
+        : (ocup.primeira ? l.cron.filter(e => e.fim <= ocup.fim) : ocup.etapas);
+      if (!etapas.length) return;
+      const bIni = etapas[0].ini, bFim = etapas[etapas.length-1].fim;
+      if (!bIni || !bFim || bFim < ini || bIni > fim) return;
+      const x0 = x(bIni), largura = Math.max(6, x(bFim) - x0);
+      const segs = etapas.map(e => {
         const w = Math.max(2, ((e.fim - e.ini) / DIA_MS) * ppd);
         const c = ETAPA_COR[e.etapa] || '#8f9ac0';
         const rot = w >= 52 ? `<span style="color:${textOn(c)}">${esc(e.rotulo.slice(0,11))}</span>` : '';
         return `<div class="tl-seg" style="width:${w}px;background:${c}"
                   data-tip="${esc(l.lote)}|${esc(l.nome)}|${esc(e.rotulo)}|${fmtDate(e.ini)}|${fmtDate(e.fim)}|${e.dias}">${rot}</div>`;
       }).join('');
+      const marca = ocup && !ocup.primeira ? ' · transferido' : '';
       barras += `<div class="tl-name" style="left:${Math.max(2, x0)}px">${esc(l.lote)} · ${esc(l.nome)}`
-             + `${l.status === 'PLANEJADO' ? ' · planejado' : ''}</div>`
+             + `${l.status === 'PLANEJADO' ? ' · planejado' : ''}${marca}</div>`
              + `<div class="tl-bar${l.status === 'PLANEJADO' ? ' planned' : ''}" style="left:${x0}px;width:${largura}px">${segs}</div>`;
     });
     html += `<div class="tl-row"><div class="tl-label">${esc(linha.rotulo)}<small>${esc(linha.sub)}</small></div>`
@@ -2094,8 +2236,11 @@ function numOut(v){
   return s.replace('.', ',');
 }
 
-function campo(nome, tipo, valor, opcoes, wide){
-  const id = 'f_' + nome.replace(/[^A-Za-z0-9]/g,'_');
+/* `pref` isola os ids por formulário: vários modais têm campos de mesmo nome
+   (Tanque, Status, Observacoes) e sem prefixo o getElementById pegaria o do
+   modal errado — que continua no DOM mesmo fechado. */
+function campo(nome, tipo, valor, opcoes, wide, pref){
+  const id = (pref || 'f_') + nome.replace(/[^A-Za-z0-9]/g,'_');
   let ctrl;
   if (tipo === 'select'){
     const has = opcoes.some(o => key(o) === key(valor));
@@ -2160,8 +2305,15 @@ function openLoteModal(row, tanquePre){
     campo('Rotulo','select', g('Rotulo'), lista('Aprovacao')),
     campo('Material Divulgacao','select', g('Material Divulgacao'), lista('Aprovacao')),
     campo('Data Final Real','date', toISO(parseDate(g('Data Final Real')))),
+    campo('Tanque Final','select', g('Tanque Final'), tanques),
+    campo('Transfere na Etapa','select', g('Transfere na Etapa'),
+      ETAPA_ORDEM.filter(e => e.ocupa).map(e => e.rotulo)),
     campo('Observacoes','text', g('Observacoes'), null, true),
   ].join('');
+
+  document.getElementById('f_Transfere_na_Etapa').insertAdjacentHTML('afterend',
+    '<p class="hint" style="margin:6px 0 0">Preencha os dois só quando o lote terminar em outro '
+    + 'fermentador. A partir dessa etapa a cerveja passa para o tanque final, e o primeiro tanque é liberado.</p>');
 
   // Ao escolher um código do catálogo, preenche nome/estilo/ABV sozinho.
   // Código novo é aceito: a cerveja é criada na aba Cervejas ao salvar.
@@ -2193,6 +2345,27 @@ async function submitLote(){
   if (!get('Data Inicial')) return toast('Informe a data inicial.', false);
 
   const cod = get('Codigo').toUpperCase();
+
+  /* Um código = uma cerveja. Sem isso, o custeio e a timeline passam a
+     misturar receitas diferentes debaixo do mesmo código. */
+  const erroCod = validarCodigo(cod, get('Nome da Cerveja'));
+  if (erroCod) return toast(erroCod, false);
+
+  /* Nada entra em produção às cegas: sem ficha de insumos custeada, o custo
+     por litro e a margem do lote seriam inventados. */
+  if (key(get('Status')) === 'EM PRODUCAO' && !temCusteio(cod)){
+    toast('Antes de iniciar a produção, cadastre os insumos e o custo desta cerveja.', false);
+    closeModal('loteOverlay');
+    return abrirComposicao(key(cod));
+  }
+
+  if (get('Tanque Final') && !get('Transfere na Etapa'))
+    return toast('Escolha em qual etapa a cerveja passa para o tanque final.', false);
+  if (get('Transfere na Etapa') && !get('Tanque Final'))
+    return toast('Escolha para qual fermentador a cerveja vai na transferência.', false);
+  if (get('Tanque Final') && key(get('Tanque Final')) === key(get('Tanque')))
+    return toast('O tanque final precisa ser diferente do tanque inicial.', false);
+
   const values = COLS_PRODUCAO.map(c =>
     c === 'Codigo' ? cod
     : ['ABV%','Volume (L)'].includes(c) ? numOut(get(c))
@@ -2227,6 +2400,307 @@ async function submitLote(){
   } finally {
     btn.disabled = false; btn.textContent = 'Salvar';
   }
+}
+
+/* =====================================================================
+   TAREFAS E RESPONSÁVEIS
+   As regras aqui são as MESMAS do Apps Script que envia no Telegram. Se
+   mudar uma, mude a outra — a tela é o espelho do que o robô vai cobrar.
+   ===================================================================== */
+
+/** Todas as funções cobráveis: as etapas do processo + as fixas. */
+function funcoesCobraveis(){
+  return [
+    ...ETAPA_ORDEM.map(e => ({ funcao: e.etapa, rotulo: e.rotulo })),
+    ...FUNCOES_EXTRA,
+  ];
+}
+
+function responsavelDe(funcao){
+  const f = key(funcao);
+  return (DB.responsaveis || []).find(r =>
+    key(r['Funcao']) === f && key(r['Ativo']) !== 'NAO') || null;
+}
+
+/** Lista de tarefas em aberto, da mais urgente para a menos. */
+function tarefasPendentes(){
+  const agora = new Date();
+  const hoje0 = hoje();
+  const dEtapa  = PARAM['AVISO ETAPA DIAS']  ?? 2;
+  const dCusto  = PARAM['AVISO CUSTO DIAS']  ?? 7;
+  const dRotulo = PARAM['AVISO ROTULO DIAS'] ?? 15;
+  const out = [];
+
+  const add = (t) => out.push({ ...t,
+    dias: t.prazo ? diffDias(hoje0, t.prazo) : null,
+    responsavel: responsavelDe(t.funcao),
+  });
+
+  LOTES.filter(l => !l.cancelado && !l.concluido).forEach(l => {
+    // Etapas do cronograma que ainda não terminaram e já estão na janela
+    l.cron.forEach(e => {
+      if (!e.ini || !e.fim || e.fim <= agora) return;
+      if (diffDias(hoje0, e.ini) > dEtapa) return;
+      add({ tipo:'ETAPA', funcao:e.etapa,
+            titulo:`${e.rotulo} — ${l.nome}`,
+            detalhe:`Lote ${l.lote} · tanque ${l.tanque || '—'}`,
+            lote:l, prazo:e.ini, cor:ETAPA_COR[e.etapa] });
+    });
+
+    // Estudo de custo pendente, cobrado antes de o lote começar
+    if (!temCusteio(l.codigo) && l.inicio && diffDias(hoje0, l.inicio) <= dCusto)
+      add({ tipo:'CUSTO', funcao:'ESTUDO DE CUSTO',
+            titulo:`Custear ${l.nome}`,
+            detalhe:`Lote ${l.lote} começa sem ficha de insumos`,
+            lote:l, prazo:l.inicio, cor:'var(--red)' });
+
+    // Rótulo e material de divulgação, cobrados antes do envase
+    if (l.fim && diffDias(hoje0, l.fim) <= dRotulo){
+      if (key(l.rotulo) !== 'APROVADO')
+        add({ tipo:'ROTULO', funcao:'ROTULO',
+              titulo:`Rótulo de ${l.nome}`,
+              detalhe:`Lote ${l.lote} · situação ${l.rotulo || 'não informada'}`,
+              lote:l, prazo:l.fim, cor:'var(--amber)' });
+      if (key(l.material) !== 'APROVADO')
+        add({ tipo:'DIVULGACAO', funcao:'DIVULGACAO',
+              titulo:`Divulgação de ${l.nome}`,
+              detalhe:`Lote ${l.lote} · situação ${l.material || 'não informada'}`,
+              lote:l, prazo:l.fim, cor:'var(--amber)' });
+    }
+  });
+
+  return out.sort((a,b) => (a.prazo || 0) - (b.prazo || 0));
+}
+
+function renderTarefas(){
+  const todas = tarefasPendentes();
+  const fFun  = document.getElementById('tfFuncao').value;
+  const soAtr = document.getElementById('tfSoAtraso').checked;
+  const rows  = todas.filter(t =>
+    (!fFun || key(t.funcao) === key(fFun)) && (!soAtr || t.dias < 0));
+
+  const atrasadas   = todas.filter(t => t.dias < 0);
+  const semDono     = todas.filter(t => !t.responsavel);
+  const semTelegram = todas.filter(t => t.responsavel && !norm(t.responsavel['Telegram Chat ID']));
+
+  document.getElementById('kpiTarefas').innerHTML = [
+    kpi('Tarefas em aberto', String(todas.length), '', 'na janela de cobrança'),
+    kpi('Atrasadas', String(atrasadas.length), atrasadas.length ? 'neg' : 'pos',
+        atrasadas.length ? 'já passaram do prazo' : 'nada vencido'),
+    kpi('Sem responsável', String(semDono.length), semDono.length ? 'warn' : 'pos',
+        semDono.length ? 'ninguém vai ser cobrado' : 'todas com dono'),
+    kpi('Sem Telegram', String(semTelegram.length), semTelegram.length ? 'warn' : '',
+        'responsável sem Chat ID'),
+  ].join('');
+
+  /* Filtro de função: só as que realmente têm tarefa hoje. */
+  const usadas = [...new Set(todas.map(t => t.funcao))];
+  const sel = document.getElementById('tfFuncao');
+  const antes = sel.value;
+  sel.innerHTML = '<option value="">Todas</option>'
+    + usadas.map(f => `<option value="${esc(f)}">${esc(rotuloFuncao(f))}</option>`).join('');
+  sel.value = antes;
+
+  document.getElementById('thTarefas').innerHTML =
+    ['Prazo','Prazo em','Tarefa','Lote','Função','Responsável','Telegram']
+    .map((c,i) => `<th${i===1?' class="num"':''}>${c}</th>`).join('');
+
+  document.querySelector('#tblTarefas tbody').innerHTML = rows.map(t => {
+    const r = t.responsavel;
+    const chat = r ? norm(r['Telegram Chat ID']) : '';
+    const quando = t.dias == null ? '—'
+      : t.dias < 0  ? `<span class="badge err">${Math.abs(t.dias)}d em atraso</span>`
+      : t.dias === 0 ? '<span class="badge warn">hoje</span>'
+      : `<span class="badge ${t.dias <= 2 ? 'warn' : 'info'}">em ${t.dias}d</span>`;
+    return `<tr class="row-click" onclick="abrirLote('${esc(t.lote.lote)}')">
+      <td>${fmtDate(t.prazo)}</td>
+      <td class="num">${quando}</td>
+      <td><span class="stage-dot" style="display:inline-block;background:${t.cor || 'var(--txt3)'};margin-right:6px"></span>
+          <b>${esc(t.titulo)}</b><br><span style="color:var(--txt3)">${esc(t.detalhe)}</span></td>
+      <td>${esc(t.lote.lote)}</td>
+      <td>${esc(rotuloFuncao(t.funcao))}</td>
+      <td>${r ? esc(norm(r['Nome'])) : '<span style="color:var(--red)">sem responsável</span>'}</td>
+      <td>${chat ? '<span class="badge ok">ok</span>'
+                 : (r ? '<span class="badge warn">falta Chat ID</span>' : '—')}</td>
+    </tr>`;
+  }).join('') || '<tr><td class="empty" colspan="7">Nada em cobrança nesta janela.</td></tr>';
+
+  renderResponsaveis();
+}
+
+function rotuloFuncao(f){
+  const achou = funcoesCobraveis().find(x => key(x.funcao) === key(f));
+  return achou ? achou.rotulo : f;
+}
+
+function renderResponsaveis(){
+  const editando = podeEditar;
+  document.getElementById('thResp').innerHTML =
+    ['Função','Responsável','Telegram Chat ID','Ativo','Observações']
+    .map(c => `<th>${c}</th>`).join('') + (editando ? '<th></th>' : '');
+
+  const linhas = funcoesCobraveis().map(f => {
+    const r = (DB.responsaveis || []).find(x => key(x['Funcao']) === key(f.funcao));
+    const chat = r ? norm(r['Telegram Chat ID']) : '';
+    const ativo = r && key(r['Ativo']) !== 'NAO';
+    return `<tr>
+      <td><b>${esc(f.rotulo)}</b>${key(f.rotulo) !== key(f.funcao)
+            ? `<br><span style="color:var(--txt3)">${esc(f.funcao)}</span>` : ''}</td>
+      <td>${r ? esc(norm(r['Nome'])) : '<span style="color:var(--txt3)">— ninguém —</span>'}</td>
+      <td>${chat ? esc(chat) : (r ? '<span class="badge warn">falta</span>' : '—')}</td>
+      <td>${r ? `<span class="badge ${ativo ? 'ok' : 'mute'}">${ativo ? 'SIM' : 'NAO'}</span>` : '—'}</td>
+      <td style="color:var(--txt2)">${r ? esc(norm(r['Observacoes'])) : ''}</td>
+      ${editando ? `<td><button class="btn icon-btn" title="Definir responsável"
+          onclick="openRespModal(${r ? r._row : 0}, '${esc(f.funcao)}')">${r ? '✏️' : '+'}</button></td>` : ''}
+    </tr>`;
+  }).join('');
+  document.querySelector('#tblResp tbody').innerHTML = linhas;
+
+  const semDono = funcoesCobraveis().filter(f => !responsavelDe(f.funcao)).length;
+  document.getElementById('respAviso').innerHTML = semDono
+    ? `<span style="color:var(--amber)">${semDono} função(ões) ainda sem responsável ativo.</span> `
+      + 'Enquanto isso, essas tarefas aparecem aqui mas ninguém recebe a mensagem.'
+    : 'Todas as funções têm responsável ativo.';
+}
+
+function openRespModal(row, funcaoPre){
+  if (!podeEditar) return toast('Sua conta não tem permissão para editar.', false);
+  const r = row ? (DB.responsaveis || []).find(x => x._row === row) : null;
+  const g = c => r ? norm(r[c]) : '';
+  const funcoes = funcoesCobraveis().map(f => f.funcao);
+
+  document.getElementById('respTitle').textContent =
+    r ? `Responsável por ${rotuloFuncao(g('Funcao'))}` : 'Novo responsável';
+  document.getElementById('respForm').dataset.row = row || '';
+  document.getElementById('respForm').innerHTML = [
+    campo('Funcao','select', r ? g('Funcao') : (funcaoPre || ''), funcoes, false, 'frp_'),
+    campo('Nome','text', g('Nome'), null, false, 'frp_'),
+    campo('Telegram Chat ID','text', g('Telegram Chat ID'), null, false, 'frp_'),
+    campo('Ativo','select', r ? g('Ativo') : 'SIM', ['SIM','NAO'], false, 'frp_'),
+    campo('Observacoes','text', g('Observacoes'), null, true, 'frp_'),
+  ].join('');
+  document.getElementById('frp_Telegram_Chat_ID').insertAdjacentHTML('afterend',
+    '<p class="hint" style="margin:6px 0 0">É o número da conversa da pessoa com o bot. '
+    + 'Ela precisa mandar uma mensagem para o bot uma vez antes de conseguir receber.</p>');
+  document.getElementById('respOverlay').classList.add('open');
+}
+
+async function submitResp(){
+  if (!accessToken) return toast('Entre para editar antes de salvar.', false);
+  const form = document.getElementById('respForm');
+  const row  = Number(form.dataset.row || 0);
+  const get  = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
+
+  if (!get('Funcao')) return toast('Escolha a função.', false);
+  if (!get('Nome'))   return toast('Informe o nome do responsável.', false);
+
+  const dup = (DB.responsaveis || []).some(x =>
+    key(x['Funcao']) === key(get('Funcao')) && x._row !== row && key(x['Ativo']) !== 'NAO');
+  if (dup) return toast('Essa função já tem um responsável ativo. Edite o que existe ou desative-o.', false);
+
+  const values = COLS_RESP.map(c => get(c));
+  const btn = document.getElementById('respSaveBtn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    if (row) await updateRow(TABS.responsaveis.name, row, values);
+    else     await appendRow(TABS.responsaveis.name, values);
+    toast('Responsável salvo.', true);
+    closeModal('respOverlay');
+    await refresh();
+  } catch (e){
+    toast('Erro ao salvar: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar';
+  }
+}
+
+/* ------------------------- FERMENTADOR ------------------------- */
+function openTanqueModal(row){
+  if (!podeEditar) return toast('Sua conta não tem permissão para editar.', false);
+  const r = row ? (DB.tanques || []).find(x => x._row === row) : null;
+  const g = c => r ? norm(r[c]) : '';
+
+  document.getElementById('tanqueTitle').textContent =
+    r ? `Editar ${g('Tanque')}` : 'Novo fermentador';
+  document.getElementById('tanqueForm').dataset.row = row || '';
+  document.getElementById('tanqueForm').innerHTML = [
+    campo('Tanque','text', r ? g('Tanque') : proximoTanque(), null, false, 'ftq_'),
+    campo('Capacidade (L)','number', g('Capacidade (L)'), null, false, 'ftq_'),
+    campo('Tipo','text', g('Tipo'), null, false, 'ftq_'),
+    campo('Local','text', g('Local'), null, false, 'ftq_'),
+    campo('Status','select', r ? g('Status') : 'ATIVO', ['ATIVO','MANUTENCAO','INATIVO'], false, 'ftq_'),
+    campo('Observacoes','text', g('Observacoes'), null, true, 'ftq_'),
+  ].join('');
+
+  /* Excluir só faz sentido num tanque que não está preso a nenhum lote. */
+  const del = document.getElementById('tanqueDelBtn');
+  const usos = r ? LOTES.filter(l => !l.cancelado &&
+                    l.ocupacoes.some(o => o.tanque === key(g('Tanque')))).length : 0;
+  del.style.display = r ? '' : 'none';
+  del.disabled = usos > 0;
+  del.title = usos > 0
+    ? `Este tanque tem ${usos} lote(s) programado(s) — remova ou realoque antes de excluir.`
+    : 'Remove o fermentador da lista';
+
+  document.getElementById('tanqueOverlay').classList.add('open');
+}
+
+/** Sugere TQ09 quando os anteriores são TQ01..TQ08. */
+function proximoTanque(){
+  const nums = (DB.tanques || [])
+    .map(t => { const m = norm(t['Tanque']).match(/(\d+)\s*$/); return m ? +m[1] : 0; });
+  const n = Math.max(0, ...nums) + 1;
+  return `TQ${String(n).padStart(2,'0')}`;
+}
+
+async function submitTanque(){
+  if (!accessToken) return toast('Entre para editar antes de salvar.', false);
+  const form = document.getElementById('tanqueForm');
+  const row  = Number(form.dataset.row || 0);
+  const get  = c => { const el = form.querySelector(`[name="${CSS.escape(c)}"]`); return el ? el.value.trim() : ''; };
+
+  const nome = get('Tanque');
+  if (!nome) return toast('Dê um nome ao fermentador (ex.: TQ09).', false);
+  if (!num(get('Capacidade (L)'))) return toast('Informe a capacidade em litros.', false);
+
+  const repetido = (DB.tanques || []).some(t => key(t['Tanque']) === key(nome) && t._row !== row);
+  if (repetido) return toast(`Já existe um fermentador chamado ${nome}.`, false);
+
+  const values = COLS_TANQUE.map(c =>
+    c === 'Capacidade (L)' ? numOut(get(c)) : get(c));
+
+  const btn = document.getElementById('tanqueSaveBtn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  try {
+    if (row) await updateRow(TABS.tanques.name, row, values);
+    else     await appendRow(TABS.tanques.name, values);
+    toast(row ? 'Fermentador atualizado.' : `Fermentador ${nome} cadastrado.`, true);
+    closeModal('tanqueOverlay');
+    await refresh();
+  } catch (e){
+    toast('Erro ao salvar: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar';
+  }
+}
+
+async function excluirTanque(){
+  const row = Number(document.getElementById('tanqueForm').dataset.row || 0);
+  if (!row) return;
+  const nome = (DB.tanques || []).find(x => x._row === row);
+  try {
+    await limparLinha(TABS.tanques.name, row, COLS_TANQUE.length);
+    toast(`Fermentador ${norm(nome && nome['Tanque'])} removido.`, true);
+    closeModal('tanqueOverlay');
+    await refresh();
+  } catch (e){
+    toast('Não foi possível remover: ' + e.message, false);
+  }
+}
+
+/** Esvazia a linha (a API de valores não apaga linhas; a planilha ignora vazias). */
+function limparLinha(tabName, rowNum, nCols, planilha){
+  return updateRow(tabName, rowNum, new Array(nCols).fill(''), planilha);
 }
 
 /* ------------------------- LANÇAMENTO ------------------------- */
@@ -2565,8 +3039,9 @@ function applyEditingUI(){
   badge.className   = (logado && podeEditar) ? 'badge-edit' : 'badge-readonly';
   document.getElementById('authBtn').textContent = logado ? 'Sair' : 'Entrar com Google';
 
-  ['newLoteBtn','sheetBtn'].forEach(id => {
-    document.getElementById(id).style.display = (logado && podeEditar) ? '' : 'none';
+  ['newLoteBtn','sheetBtn','novoTanqueBtn','novoRespBtn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (logado && podeEditar) ? '' : 'none';
   });
   // Gerenciar acessos é só do administrador.
   document.getElementById('acessosBtn').style.display =
@@ -2969,6 +3444,7 @@ function renderTudo(){
   renderTimeline();
   renderProducao();
   renderReceitas();
+  renderTarefas();
   aplicarAcessoFinanceiro();
   if (temFinanceiro) renderFinanceiro();
 }
