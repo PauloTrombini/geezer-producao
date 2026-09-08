@@ -93,8 +93,12 @@ function enviarAvisosDiarios() {
       agora.getHours() >= hResumo &&
       props.getProperty('ULTIMO_RESUMO') !== hoje) {
     var nR = enviarResumo_(false, null);
-    props.setProperty('ULTIMO_RESUMO', hoje);
-    gravarParametro_('ROBO ULTIMO RESUMO', carimbo + ' · ' + nR + ' mensagem(ns)');
+    /* -1 = ninguém cadastrado ainda. Nesse caso NÃO trava o dia: se a pessoa
+       for cadastrada daqui a pouco, o resumo ainda sai hoje. */
+    if (nR >= 0) {
+      props.setProperty('ULTIMO_RESUMO', hoje);
+      gravarParametro_('ROBO ULTIMO RESUMO', carimbo + ' · ' + nR + ' mensagem(ns)');
+    }
   }
 
   // 2) COBRANÇA POR TAREFA
@@ -184,8 +188,7 @@ function enviarResumo_(teste, chatForcado) {
   if (!destinos.length) {
     Logger.log('Ninguém cadastrado para receber o resumo diário. '
       + 'Cadastre no painel, aba Tarefas → Quem recebe o resumo diário.');
-    gravarLog_([[new Date(), '—', '—', 0, 'SEM DESTINATARIO DO RESUMO', 'RESUMO']]);
-    return 0;
+    return -1;   // não trava o dia: cadastrou depois, ainda sai hoje
   }
 
   var texto = montarResumo_(lerParametros_(), teste);
