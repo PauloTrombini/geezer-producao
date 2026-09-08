@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade — Geezer · Programa de Produção</title>
+<style>
+  :root{
+    --bg:#0f1420; --card:#161d2c; --line:#243146;
+    --txt:#e8edf7; --txt2:#a9b6cc; --txt3:#6f7f99; --accent:#d9a12b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:48px 22px 80px}
+  header{display:flex; align-items:center; gap:12px; margin-bottom:34px}
+  .logo{
+    width:40px; height:40px; border-radius:10px; flex:none;
+    background:linear-gradient(160deg,#e0aa38,#b8791b);
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  h1{font-size:25px; margin:0 0 6px; letter-spacing:-.2px}
+  .sub{color:var(--txt2); font-size:13.5px; margin:0}
+  h2{font-size:16.5px; margin:34px 0 10px; letter-spacing:-.1px}
+  p,li{color:var(--txt2)}
+  li{margin-bottom:7px}
+  strong{color:var(--txt)}
+  a{color:var(--accent)}
+  .card{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:18px 20px; margin:22px 0;
+  }
+  .card p:last-child{margin-bottom:0}
+  .card p:first-child{margin-top:0}
+  footer{
+    margin-top:46px; padding-top:20px; border-top:1px solid var(--line);
+    color:var(--txt3); font-size:13px;
+  }
+  footer a{color:var(--txt2)}
+  code{
+    background:#0b101a; border:1px solid var(--line); border-radius:5px;
+    padding:1px 6px; font-size:12.5px; color:var(--txt2);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">🍺</div>
+    <div>
+      <h1>Política de Privacidade</h1>
+      <p class="sub">Geezer · Programa de Produção — atualizada em 8 de setembro de 2026</p>
+    </div>
+  </header>
+
+  <p>
+    O <strong>Geezer · Programa de Produção</strong> é uma ferramenta interna da
+    Cervejaria Geezer para acompanhar brassagens, ocupação dos fermentadores,
+    custo por cerveja e o controle financeiro da produção. Esta página explica,
+    em português claro, quais dados o painel acessa e o que ele faz com eles.
+  </p>
+
+  <div class="card">
+    <p>
+      <strong>O resumo:</strong> o painel não tem servidor nem banco de dados
+      próprio. Ele é uma página que roda no seu navegador e lê e escreve
+      diretamente nas planilhas do Google da Cervejaria Geezer, usando a
+      permissão que você mesmo concede ao entrar. Nada é copiado para outro
+      lugar, e nada é vendido ou compartilhado com terceiros.
+    </p>
+  </div>
+
+  <h2>Quem é o responsável</h2>
+  <p>
+    A Cervejaria Geezer é a responsável pelos dados tratados aqui. Para dúvidas,
+    correções ou remoção de acesso, fale com o administrador do painel pelo
+    e-mail <strong>trombini.paulo@gmail.com</strong>.
+  </p>
+
+  <h2>Quais permissões o painel pede, e por quê</h2>
+  <ul>
+    <li>
+      <strong>Planilhas do Google</strong> (<code>spreadsheets</code>) — para ler
+      os lotes, receitas, insumos e lançamentos, e para gravar o que você cadastra
+      pelo painel. A permissão é usada apenas nas duas planilhas da Cervejaria
+      Geezer.
+    </li>
+    <li>
+      <strong>Seu endereço de e-mail</strong> (<code>userinfo.email</code>) — para
+      identificar qual conta entrou e aplicar o perfil de acesso correspondente,
+      por exemplo saber se aquela pessoa pode ver a aba Financeiro.
+    </li>
+    <li>
+      <strong>Compartilhamento no Google Drive</strong> (<code>drive</code>) —
+      pedida <em>somente</em> ao administrador, e só no momento em que ele abre a
+      tela “Gerenciar acessos”, para listar, liberar e revogar o acesso das duas
+      planilhas. Quem apenas consulta o painel nunca recebe esse pedido.
+    </li>
+  </ul>
+
+  <h2>O que o painel faz com os dados</h2>
+  <p>
+    Os dados de produção e financeiros ficam onde sempre estiveram: nas planilhas
+    do Google Sheets da Cervejaria Geezer. O painel apenas lê essas planilhas para
+    montar as telas e grava nelas o que você cadastra.
+  </p>
+  <p>
+    O token de acesso emitido pelo Google fica na memória do navegador durante a
+    sessão e é descartado quando você sai ou fecha a aba. O painel não usa
+    cookies de rastreamento, não tem analytics, não tem publicidade e não envia
+    seus dados para nenhum outro serviço.
+  </p>
+
+  <h2>Com quem os dados são compartilhados</h2>
+  <p>
+    Com ninguém além do próprio Google, que hospeda as planilhas e faz a
+    autenticação. Não há venda, aluguel nem transferência de dados a terceiros.
+    O uso das informações obtidas pelas APIs do Google segue a
+    <a href="https://developers.google.com/terms/api-services-user-data-policy"
+       target="_blank" rel="noopener">Política de Dados do Usuário dos Serviços de API do Google</a>,
+    incluindo os requisitos de Uso Limitado.
+  </p>
+
+  <h2>Por quanto tempo os dados ficam guardados</h2>
+  <p>
+    Pelo tempo que a Cervejaria Geezer mantiver as planilhas. Como o painel não
+    guarda cópia, apagar uma linha na planilha a remove do painel na atualização
+    seguinte.
+  </p>
+
+  <h2>Como revogar o acesso</h2>
+  <p>
+    A qualquer momento, em
+    <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>,
+    você pode retirar a permissão concedida a este painel. Para deixar de ver os
+    dados por completo, peça ao administrador que remova o compartilhamento das
+    planilhas com a sua conta.
+  </p>
+
+  <h2>Alterações nesta política</h2>
+  <p>
+    Se algo mudar no funcionamento do painel, esta página é atualizada e a data no
+    topo passa a refletir a revisão mais recente.
+  </p>
+
+  <footer>
+    <a href="/">← Voltar ao painel</a> · <a href="/termos.html">Termos de Serviço</a>
+  </footer>
+
+</div>
+</body>
+</html>
