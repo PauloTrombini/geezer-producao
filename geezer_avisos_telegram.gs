@@ -21,23 +21,52 @@
  *    O Google vai pedir autorização — aceite. Isso manda o resumo de hoje
  *    só para você, para conferir o texto.
  * 6. Quando estiver satisfeito, execute `instalarGatilhoDiario` uma única vez.
- *    A partir daí ele roda sozinho todo dia no horário configurado.
+ *    Ele cria um gatilho DE HORA EM HORA. A cada hora o script confere a aba
+ *    Parametros e só envia quando bate com AVISO HORA — assim o horário é
+ *    mudado no painel, sem ninguém abrir o Apps Script de novo.
  *
- * PARA DESLIGAR sem mexer no script: na aba Parametros da planilha, coloque
- * 0 em TELEGRAM ATIVO.
+ * O QUE SE CONFIGURA NO PAINEL (aba Tarefas → Envio no Telegram)
+ *    AVISO HORA           hora cheia do envio (0 a 23)
+ *    AVISO SO DIAS UTEIS  1 = não manda sábado e domingo
+ *    TELEGRAM ATIVO       0 = desliga o envio sem mexer no script
+ *    AVISO ETAPA/CUSTO/ROTULO DIAS  janelas de antecedência
  */
 
 /* ========================= CONFIGURAÇÃO ========================= */
 
 var SHEET_ID = '1PysLxO4MFOk_k1R8neUzIwqNszxE3SxcGH-ofh7eXn4';
-var HORA_ENVIO = 8;          // 8h da manhã, no fuso do projeto
+var HORA_PADRAO = 8;         // usado só se AVISO HORA não estiver na planilha
 var ABA_LOG = 'Avisos_Log';  // criada automaticamente na primeira execução
 
 /* ========================= PONTOS DE ENTRADA ========================= */
 
-/** Roda todo dia pelo gatilho. */
+/**
+ * Chamado de hora em hora pelo gatilho. Ele mesmo decide se é a hora certa,
+ * lendo a planilha — é isso que permite mudar o horário pelo painel.
+ */
 function enviarAvisosDiarios() {
+  var param = lerParametros_();
+  var agora = new Date();
+  var hoje = Utilities.formatDate(agora, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  var hora = param['AVISO HORA'] != null ? Math.round(numero_(param['AVISO HORA'])) : HORA_PADRAO;
+  if (agora.getHours() !== hora) return;                       // ainda não é a hora
+
+  var dia = agora.getDay();                                     // 0=domingo, 6=sábado
+  if (numero_(param['AVISO SO DIAS UTEIS']) === 1 && (dia === 0 || dia === 6)) {
+    Logger.log('Fim de semana e AVISO SO DIAS UTEIS = 1. Nada enviado.');
+    return;
+  }
+
+  // Trava simples contra dois disparos no mesmo dia
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('ULTIMO_ENVIO') === hoje) {
+    Logger.log('Já enviado hoje (' + hoje + ').');
+    return;
+  }
+
   executar_(false, null);
+  props.setProperty('ULTIMO_ENVIO', hoje);
 }
 
 /** Teste manual: monta tudo e manda só para você, sem incomodar a equipe. */
@@ -47,18 +76,26 @@ function testarAgora() {
   for (var i = 0; i < resp.length; i++) {
     if (texto_(resp[i]['Telegram Chat ID'])) { eu = texto_(resp[i]['Telegram Chat ID']); break; }
   }
-  if (!eu) throw new Error('Nenhum responsável tem Telegram Chat ID preenchido na aba Responsaveis.');
+  if (!eu) throw new Error('Nenhum responsável tem Telegram Chat ID preenchido na aba Responsaveis. '
+    + 'Cadastre alguém no painel, aba Tarefas → + Responsável.');
   executar_(true, eu);
 }
 
-/** Execute UMA vez para agendar o envio diário. */
+/**
+ * Execute UMA vez. Cria um gatilho de hora em hora; quem decide a hora do
+ * envio é a planilha, então você nunca mais precisa voltar aqui para mudar
+ * o horário.
+ */
 function instalarGatilhoDiario() {
   var t = ScriptApp.getProjectTriggers();
   for (var i = 0; i < t.length; i++) {
     if (t[i].getHandlerFunction() === 'enviarAvisosDiarios') ScriptApp.deleteTrigger(t[i]);
   }
-  ScriptApp.newTrigger('enviarAvisosDiarios').timeBased().atHour(HORA_ENVIO).everyDays(1).create();
-  Logger.log('Gatilho diário criado para as ' + HORA_ENVIO + 'h.');
+  ScriptApp.newTrigger('enviarAvisosDiarios').timeBased().everyHours(1).create();
+  var p = lerParametros_();
+  var h = p['AVISO HORA'] != null ? Math.round(numero_(p['AVISO HORA'])) : HORA_PADRAO;
+  Logger.log('Gatilho de hora em hora criado. Hoje o envio está marcado para ' + h + 'h '
+           + '(mude no painel, aba Tarefas → Envio no Telegram).');
 }
 
 /** Remove o agendamento. */
@@ -90,16 +127,25 @@ function executar_(teste, chatForcado) {
   var semDono = [];
 
   Object.keys(porFuncao).forEach(function (f) {
-    var r = null;
+    // Uma função pode ter vários responsáveis — todos os ativos com Chat ID recebem.
+    var equipe = [];
     for (var i = 0; i < responsaveis.length; i++) {
-      if (chave_(responsaveis[i]['Funcao']) === f &&
-          chave_(responsaveis[i]['Ativo']) !== 'NAO') { r = responsaveis[i]; break; }
+      var r = responsaveis[i];
+      if (chave_(r['Funcao']) !== f) continue;
+      if (chave_(r['Ativo']) === 'NAO') continue;
+      if (!texto_(r['Telegram Chat ID'])) continue;
+      equipe.push(r);
     }
-    var chat = r ? texto_(r['Telegram Chat ID']) : '';
-    if (!chat) { semDono.push({ funcao: f, qtd: porFuncao[f].length }); return; }
-    var alvo = chatForcado || chat;
-    porPessoa[alvo] = porPessoa[alvo] || { nome: texto_(r['Nome']), tarefas: [] };
-    porPessoa[alvo].tarefas = porPessoa[alvo].tarefas.concat(porFuncao[f]);
+    if (!equipe.length) { semDono.push({ funcao: f, qtd: porFuncao[f].length }); return; }
+
+    equipe.forEach(function (r) {
+      var alvo = chatForcado || texto_(r['Telegram Chat ID']);
+      porPessoa[alvo] = porPessoa[alvo] || { nome: texto_(r['Nome']), tarefas: [] };
+      // No modo teste todos caem no mesmo chat; evita repetir a mesma tarefa.
+      porFuncao[f].forEach(function (t) {
+        if (porPessoa[alvo].tarefas.indexOf(t) < 0) porPessoa[alvo].tarefas.push(t);
+      });
+    });
   });
 
   var log = [];
