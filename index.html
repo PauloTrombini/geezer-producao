@@ -262,6 +262,14 @@
   .gate-card p{ color:var(--txt2); font-size:13.5px; margin:0 0 22px; line-height:1.55; }
   .gate-card .btn{ padding:11px 22px; font-size:14px; }
   .gate-msg{ margin-top:18px; font-size:13px; color:var(--txt2); line-height:1.55; }
+  .gate-nota{
+    margin:22px auto 0; max-width:390px; font-size:12px; line-height:1.55;
+    color:var(--txt3); border-top:1px solid var(--line); padding-top:16px;
+  }
+  .gate-nota b{ color:var(--txt2); font-weight:600; }
+  .gate-links{ margin:12px 0 0; font-size:11.5px; }
+  .gate-links a{ color:var(--txt3); text-decoration:none; }
+  .gate-links a:hover{ color:var(--txt2); text-decoration:underline; }
   .gate-msg.err{ color:var(--red); }
 
   /* ---------- Gerenciar acessos ---------- */
@@ -650,6 +658,14 @@
     <p>Este painel é privado. Entre com a conta Google autorizada para ver o programa de produção e o financeiro da cervejaria.</p>
     <button class="btn btn-primary" onclick="handleAuthClick()">Entrar com Google</button>
     <div class="gate-msg" id="gateMsg"></div>
+    <p class="gate-nota">
+      No primeiro acesso o Google avisa que não verificou este app — é esperado numa
+      ferramenta interna. Clique em <b>Avançado</b> e depois em <b>Acessar
+      geezer-producao.pages.dev</b>.
+    </p>
+    <p class="gate-links">
+      <a href="/privacidade">Política de Privacidade</a> · <a href="/termos">Termos de Serviço</a>
+    </p>
   </div>
 </div>
 
@@ -2537,11 +2553,8 @@ function escolherParaCustear(){
    de `podeEditar` — que vem da permissão real da conta na planilha.   */
 const SCOPE_ACESSOS = 'https://www.googleapis.com/auth/drive';
 const URL_PLANILHA  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
-/* A tela de consentimento do Google está em "Testando": além de compartilhar a
-   planilha, cada e-mail novo precisa entrar na lista de usuários de teste.
-   Isso o Google não expõe por API — só por esta página.                      */
-const URL_TESTERS = 'https://console.cloud.google.com/auth/audience'
-                  + '?project=project-42628e75-056e-4628-a30';
+const URL_PRIVACIDADE = '/privacidade';
+const URL_TERMOS      = '/termos';
 
 function applyEditingUI(){
   const logado = !!accessToken;
@@ -2587,14 +2600,16 @@ function initGis(){
     scope: SCOPES,
     callback: async resp => {
       if (resp.error){
-        /* access_denied quase sempre é a tela de consentimento em "Testando":
-           o Google só deixa entrar quem estiver na lista de usuários de teste.
-           A mensagem genérica não ajudava ninguém a saber o que pedir.       */
+        /* O app está publicado, então access_denied aqui quase sempre é a pessoa
+           tendo recuado na tela de aviso do Google — que aparece porque este é
+           um painel interno, sem verificação. A mensagem genérica não explicava
+           isso e a pessoa desistia achando que estava barrada.                */
         gateMsg(resp.error === 'access_denied'
-          ? 'O Google bloqueou esta conta no painel da Geezer.<br>'
-            + 'Peça a <b>Paulo Trombini</b> para <b>autorizar o seu e-mail</b> — são dois passos '
-            + 'do lado dele: liberar a planilha e cadastrar a conta como autorizada no Google. '
-            + 'Depois disso é só tentar de novo.'
+          ? 'A permissão não foi concedida, então o painel não pode abrir.<br>'
+            + 'Se apareceu um aviso dizendo que <b>o Google não verificou este app</b>, '
+            + 'clique em <b>Avançado</b> e depois em <b>Acessar geezer-producao.pages.dev</b>. '
+            + 'Esse aviso é normal: o painel é uma ferramenta interna da cervejaria, '
+            + 'não um app de loja.'
           : 'Não foi possível entrar: ' + esc(resp.error), true);
         return;
       }
@@ -2827,7 +2842,7 @@ async function adicionarAcesso(){
     document.getElementById('acFin').checked = false;
     toast(`Acesso de ${PAPEL[papel]} liberado para ${email}`
         + (comFin ? ', incluindo o financeiro.' : ' (sem o financeiro).'), true);
-    lembrarUsuarioDeTeste(email);
+    avisarPrimeiroAcesso(email);
     listarAcessos();
   } catch(e){
     toast('Não foi possível liberar: ' + e.message, false);
@@ -2836,24 +2851,17 @@ async function adicionarAcesso(){
   }
 }
 
-/* Falta o segundo passo, que só existe no Google Cloud. Em vez de deixar a
-   pessoa descobrir pelo erro "Acesso bloqueado", o painel avisa na hora e
-   já deixa o e-mail pronto para colar. */
-function lembrarUsuarioDeTeste(email){
+/* Liberar o e-mail já basta — não há mais lista de testadores para manter.
+   O que ainda assusta a pessoa é a tela de "app não verificado", então o
+   painel avisa o administrador do que dizer a ela.                        */
+function avisarPrimeiroAcesso(email){
   const el = document.getElementById('acAvisoTeste');
   el.style.display = '';
   el.innerHTML =
-    `<b style="color:var(--amber)">Falta 1 passo para ${esc(email)} conseguir entrar.</b><br>`
-  + `O Google só deixa entrar quem estiver na lista de contas autorizadas do app. `
-  + `Abra <a href="${URL_TESTERS}" target="_blank" rel="noopener">Usuários de teste no Google Cloud</a>, `
-  + `clique em <b>Add users</b> e cole o e-mail. `
-  + `<button type="button" class="btn icon-btn" onclick="copiarEmail('${esc(email)}')">Copiar e-mail</button>`;
-}
-
-function copiarEmail(email){
-  navigator.clipboard.writeText(email)
-    .then(() => toast('E-mail copiado.', true))
-    .catch(() => toast('Não consegui copiar — selecione o e-mail à mão.', false));
+    `<b>Pronto — ${esc(email)} já consegue entrar.</b><br>`
+  + `No primeiro acesso o Google mostra um aviso de que <b>não verificou este app</b>. `
+  + `É esperado, por ser uma ferramenta interna: basta clicar em <b>Avançado</b> e depois `
+  + `em <b>Acessar geezer-producao.pages.dev</b>. Vale avisar a pessoa antes, para ela não recuar.`;
 }
 
 async function criarPermissao(planilha, email, papel, avisar){
