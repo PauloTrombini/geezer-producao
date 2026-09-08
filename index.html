@@ -537,10 +537,26 @@
     <div class="panel">
       <div class="panel-head">
         <div>
+          <h2>Quem recebe o resumo diário</h2>
+          <p class="hint">Mensagem única, uma vez por dia, com o retrato geral: o que está no
+            tanque, o que começa, o que envasa, tanques livres e o que está atrasado. É o
+            acompanhamento de quem toca o negócio — não a cobrança de tarefa de cada um.</p>
+        </div>
+        <button class="btn btn-primary" id="novoResumoBtn" style="display:none;"
+                onclick="openRespModal(0, FUNCAO_RESUMO)">+ Pessoa</button>
+      </div>
+      <div class="table-scroll"><table id="tblResumoDest"><thead><tr id="thResumoDest"></tr></thead><tbody></tbody></table></div>
+      <p class="hint" id="resumoAviso" style="margin-top:12px"></p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div>
           <h2>Envio no Telegram</h2>
-          <p class="hint">O agendamento é comandado daqui. O robô confere esta tela de hora em hora e
-            só dispara no horário marcado — ninguém precisa abrir o Apps Script para mudar horário,
-            dias ou desligar o envio.</p>
+          <p class="hint">São duas mensagens diferentes, com donos e horários próprios: o
+            <b>resumo diário</b> (visão geral, para quem acompanha) e a <b>cobrança por tarefa</b>
+            (individual, para quem executa). Tudo é comandado daqui — o robô confere esta tela de
+            hora em hora e ninguém precisa abrir o Apps Script.</p>
         </div>
         <button class="btn btn-primary" id="salvarCfgBtn" style="display:none;"
                 onclick="salvarConfigAvisos()">Salvar configuração</button>
@@ -825,6 +841,10 @@ const FUNCOES_EXTRA = [
   { funcao:'ROTULO',          rotulo:'Rótulo'          },
   { funcao:'DIVULGACAO',      rotulo:'Divulgação'      },
 ];
+/* Não é uma função de execução: é quem recebe o retrato geral do dia.
+   Fica na mesma aba Responsaveis, mas fora da lista de cobrança. */
+const FUNCAO_RESUMO = 'RESUMO DIARIO';
+const ROTULO_RESUMO = 'Resumo diário';
 const COLS_LANC = ['Data','Tipo','Conta','Centro de Custo','Descricao','Valor',
   'Vencimento','Data Pagamento','Status','Lote','Documento'];
 const COLS_INSUMO  = ['Codigo','Estilo','Insumo','Classificacao','Quantidade','Unidade','Custo Unitario'];
@@ -2460,12 +2480,16 @@ function tarefasPendentes(){
 
   LOTES.filter(l => !l.cancelado && !l.concluido).forEach(l => {
     // Etapas do cronograma que ainda não terminaram e já estão na janela
+    const noTanque = l.tanque ? ` no tanque ${l.tanque}` : '';
+
     l.cron.forEach(e => {
       if (!e.ini || !e.fim || e.fim <= agora) return;
       if (diffDias(hoje0, e.ini) > dEtapa) return;
       add({ tipo:'ETAPA', funcao:e.etapa,
             titulo:`${e.rotulo} — ${l.nome}`,
             detalhe:`Lote ${l.lote} · tanque ${l.tanque || '—'}`,
+            acao:`Executar ${e.rotulo} do lote ${l.lote}${noTanque}, previsto para `
+               + `${fmtDate(e.ini)}. Depois atualize o lote no painel.`,
             lote:l, prazo:e.ini, cor:ETAPA_COR[e.etapa] });
     });
 
@@ -2474,6 +2498,9 @@ function tarefasPendentes(){
       add({ tipo:'CUSTO', funcao:'ESTUDO DE CUSTO',
             titulo:`Custear ${l.nome}`,
             detalhe:`Lote ${l.lote} começa sem ficha de insumos`,
+            acao:`Cadastrar os insumos e os custos de ${l.nome} no painel (aba Cervejas → `
+               + `ficha de custo). Sem isso o painel não deixa o lote ${l.lote} entrar em `
+               + `produção, e ele começa em ${fmtDate(l.inicio)}.`,
             lote:l, prazo:l.inicio, cor:'var(--red)' });
 
     // Rótulo e material de divulgação, cobrados antes do envase
@@ -2482,11 +2509,17 @@ function tarefasPendentes(){
         add({ tipo:'ROTULO', funcao:'ROTULO',
               titulo:`Rótulo de ${l.nome}`,
               detalhe:`Lote ${l.lote} · situação ${l.rotulo || 'não informada'}`,
+              acao:`Fechar a arte do rótulo de ${l.nome}, mandar imprimir e marcar `
+                 + `Rotulo = APROVADO no painel. O envase do lote ${l.lote} é em `
+                 + `${fmtDate(l.fim)}.`,
               lote:l, prazo:l.fim, cor:'var(--amber)' });
       if (key(l.material) !== 'APROVADO')
         add({ tipo:'DIVULGACAO', funcao:'DIVULGACAO',
               titulo:`Divulgação de ${l.nome}`,
               detalhe:`Lote ${l.lote} · situação ${l.material || 'não informada'}`,
+              acao:`Preparar a campanha de lançamento de ${l.nome} (posts, fotos, texto) e `
+                 + `marcar Material Divulgacao = APROVADO no painel. O envase do lote `
+                 + `${l.lote} é em ${fmtDate(l.fim)}.`,
               lote:l, prazo:l.fim, cor:'var(--amber)' });
     }
   });
@@ -2538,7 +2571,8 @@ function renderTarefas(){
       <td>${fmtDate(t.prazo)}</td>
       <td class="num">${quando}</td>
       <td><span class="stage-dot" style="display:inline-block;background:${t.cor || 'var(--txt3)'};margin-right:6px"></span>
-          <b>${esc(t.titulo)}</b><br><span style="color:var(--txt3)">${esc(t.detalhe)}</span></td>
+          <b>${esc(t.titulo)}</b><br><span style="color:var(--txt3)">${esc(t.detalhe)}</span>
+          ${t.acao ? `<br><span style="color:var(--txt2)">➜ ${esc(t.acao)}</span>` : ''}</td>
       <td>${esc(t.lote.lote)}</td>
       <td>${esc(rotuloFuncao(t.funcao))}</td>
       <td>${eqp.length
@@ -2557,23 +2591,49 @@ function renderTarefas(){
 /* ---------- Configuração dos avisos ----------
    Tudo isto mora na aba Parametros. O Apps Script lê os mesmos nomes, então
    mudar aqui muda o comportamento do robô sem tocar em código.            */
+const HORAS_DIA = Array.from({length:24}, (_,h) => String(h).padStart(2,'0') + ':00');
+
+const GRUPOS_AVISOS = [
+  { id:'geral', tit:'Geral',
+    sub:'Vale para as duas mensagens.' },
+  { id:'resumo', tit:'1 · Resumo diário',
+    sub:'Uma mensagem por dia com o retrato da cervejaria — o que está no tanque, o que '
+      + 'começa, o que envasa, tanques livres e o que está atrasado. Vai só para quem '
+      + 'estiver na lista "Quem recebe o resumo diário".' },
+  { id:'cobranca', tit:'2 · Cobrança por tarefa',
+    sub:'Uma mensagem por pessoa, só com as tarefas dela e a frase do que precisa ser '
+      + 'feito. Entram as tarefas dentro das janelas de antecedência abaixo.' },
+];
+
 const CFG_AVISOS = [
-  { p:'AVISO HORA',          rot:'Hora do envio',            tipo:'select',
-    opc:Array.from({length:24}, (_,h) => String(h).padStart(2,'0') + ':00'),
-    pad:8,  dica:'Hora cheia em que o resumo diário sai.' },
-  { p:'AVISO SO DIAS UTEIS', rot:'Só em dias úteis',         tipo:'simnao', pad:0,
+  { g:'geral',    p:'TELEGRAM ATIVO',      rot:'Robô ligado',            tipo:'simnao', pad:1,
+    dica:'Chave geral. Desligado, não sai nada — nem resumo, nem cobrança.' },
+  { g:'geral',    p:'AVISO SO DIAS UTEIS', rot:'Só em dias úteis',       tipo:'simnao', pad:0,
     dica:'Ligado, não manda sábado e domingo.' },
-  { p:'TELEGRAM ATIVO',      rot:'Envio ligado',             tipo:'simnao', pad:1,
-    dica:'Desligado, o robô roda mas não manda nada.' },
-  { p:'AVISO ETAPA DIAS',    rot:'Antecedência das etapas',  tipo:'num', pad:2,
+
+  { g:'resumo',   p:'RESUMO ATIVO',        rot:'Resumo diário ligado',   tipo:'simnao', pad:1,
+    dica:'Desligado, ninguém recebe o retrato do dia.' },
+  { g:'resumo',   p:'RESUMO HORA',         rot:'Hora do resumo',         tipo:'select',
+    opc:HORAS_DIA, pad:8,
+    dica:'Costuma funcionar melhor de manhã, antes de a produção começar.' },
+
+  { g:'cobranca', p:'COBRANCA ATIVA',      rot:'Cobrança ligada',        tipo:'simnao', pad:1,
+    dica:'Desligado, ninguém é cobrado individualmente.' },
+  { g:'cobranca', p:'AVISO HORA',          rot:'Hora da cobrança',       tipo:'select',
+    opc:HORAS_DIA, pad:8,
+    dica:'Hora cheia em que cada responsável recebe as tarefas dele.' },
+  { g:'cobranca', p:'AVISO ETAPA DIAS',    rot:'Antecedência das etapas', tipo:'num', pad:2,
     dica:'Dias antes do início de cada etapa do cronograma.' },
-  { p:'AVISO CUSTO DIAS',    rot:'Antecedência do custeio',  tipo:'num', pad:7,
+  { g:'cobranca', p:'AVISO CUSTO DIAS',    rot:'Antecedência do custeio', tipo:'num', pad:7,
     dica:'Dias antes do início do lote para cobrar a ficha de custo.' },
-  { p:'AVISO ROTULO DIAS',   rot:'Antecedência de rótulo',   tipo:'num', pad:15,
+  { g:'cobranca', p:'AVISO ROTULO DIAS',   rot:'Antecedência de rótulo',  tipo:'num', pad:15,
     dica:'Dias antes do envase para cobrar rótulo e divulgação.' },
 ];
 
+const cfgDe = p => CFG_AVISOS.find(c => c.p === p);
+
 function valorCfg(c){
+  if (typeof c === 'string') c = cfgDe(c);
   const v = PARAM[c.p];
   return v == null ? c.pad : v;
 }
@@ -2591,13 +2651,40 @@ function dataHoraParam(s){
   return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
 }
 
-/** Próximo disparo, respeitando hora, fim de semana e o envio de hoje. */
+/* Quando sai o próximo resumo, na mesma regra do robô: a partir da hora
+   marcada, não exatamente nela. Passou das 18h e ainda não saiu? Sai hoje,
+   na próxima checagem — dizer "amanhã" aqui seria mentira.               */
+const fimDeSemana = d => d.getDay() === 0 || d.getDay() === 6;
+
 function proximoEnvio(hora, soUteis, jaSaiuHoje){
+  const agora = new Date();
+  if (!jaSaiuHoje && !(soUteis && fimDeSemana(agora))){
+    const alvo = new Date(); alvo.setHours(hora, 0, 0, 0);
+    return { data: alvo, jaPassou: agora >= alvo };
+  }
   const d = new Date();
+  d.setDate(d.getDate() + 1);
   d.setHours(hora, 0, 0, 0);
-  if (d <= new Date() || jaSaiuHoje) d.setDate(d.getDate() + 1);
-  if (soUteis) while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return d;
+  if (soUteis) while (fimDeSemana(d)) d.setDate(d.getDate() + 1);
+  return { data: d, jaPassou: false };
+}
+
+/* O robô carimba ROBO ULTIMA CHECAGEM a cada rodada. É esse batimento que
+   deixa o painel afirmar que o agendamento está de pé — sem ninguém precisar
+   abrir o Apps Script para conferir se o gatilho existe. */
+const brDataHora = s => norm(s).replace(/^(\d{4})-(\d{2})-(\d{2}) /, '$3/$2/$1 ');
+
+/** Uma linha por canal: quando saiu a última vez e quando sai a próxima. */
+function linhaCanal(rot, ligado, hora, soUteis, ultimoTxt){
+  const ultimo = dataHoraParam(ultimoTxt);
+  const saiuHoje = ultimo ? ultimo.toDateString() === new Date().toDateString() : false;
+  const prox = proximoEnvio(hora, soUteis, saiuHoje);
+  const quando = !ligado ? '<span style="color:var(--amber)">desligado</span>'
+    : prox.jaPassou ? 'sai na <b>próxima checagem</b>'
+    : 'próximo <b>' + fmtDataHora(prox.data) + '</b>';
+  return `<div style="margin-top:5px">${esc(rot)}: ${quando}`
+    + (ultimoTxt ? ` <span style="color:var(--txt3)">· último ${esc(brDataHora(ultimoTxt))}</span>` : '')
+    + '</div>';
 }
 
 /* O robô carimba ROBO ULTIMA CHECAGEM a cada rodada. É esse batimento que
@@ -2606,13 +2693,10 @@ function proximoEnvio(hora, soUteis, jaSaiuHoje){
 function renderRoboStatus(){
   const box = document.getElementById('roboStatus');
   if (!box) return;
-  const ativo   = !!valorCfg(CFG_AVISOS[2]);
-  const hora    = Math.round(valorCfg(CFG_AVISOS[0]));
-  const soUteis = !!valorCfg(CFG_AVISOS[1]);
+  const geral   = !!valorCfg('TELEGRAM ATIVO');
+  const soUteis = !!valorCfg('AVISO SO DIAS UTEIS');
 
   const check = dataHoraParam(paramTexto('ROBO ULTIMA CHECAGEM'));
-  const envioTxt = paramTexto('ROBO ULTIMO ENVIO');
-  const envio = dataHoraParam(envioTxt);
   const min = check ? Math.floor((Date.now() - check.getTime()) / 60000) : null;
 
   let cor, titulo, detalhe;
@@ -2625,16 +2709,21 @@ function renderRoboStatus(){
     cor = 'var(--red)';
     titulo = 'Robô parado há ' + humanoDesde(min);
     detalhe = 'Ele deveria dar sinal de hora em hora. Enquanto estiver assim, '
-            + 'nenhuma cobrança sai no Telegram.';
+            + 'nada sai no Telegram.';
   } else {
-    cor = ativo ? 'var(--green)' : 'var(--amber)';
-    titulo = ativo ? 'Robô de pé' : 'Robô de pé, mas com o envio desligado';
-    const prox = proximoEnvio(hora, soUteis,
-      envio ? envio.toDateString() === new Date().toDateString() : false);
-    detalhe = 'Última checagem ' + (min <= 1 ? 'agora há pouco' : 'há ' + humanoDesde(min)) + '. '
-            + (ativo
-                ? 'Próximo resumo em <b>' + fmtDataHora(prox) + '</b>.'
-                : 'Ligue o envio abaixo para voltar a cobrar.');
+    cor = geral ? 'var(--green)' : 'var(--amber)';
+    titulo = geral ? 'Robô de pé' : 'Robô de pé, mas desligado';
+    detalhe = 'Última checagem ' + (min <= 1 ? 'agora há pouco' : 'há ' + humanoDesde(min)) + '.';
+    if (geral){
+      detalhe += linhaCanal('Resumo diário',
+        !!valorCfg('RESUMO ATIVO'), Math.round(valorCfg('RESUMO HORA')), soUteis,
+        paramTexto('ROBO ULTIMO RESUMO'));
+      detalhe += linhaCanal('Cobrança por tarefa',
+        !!valorCfg('COBRANCA ATIVA'), Math.round(valorCfg('AVISO HORA')), soUteis,
+        paramTexto('ROBO ULTIMO ENVIO'));
+    } else {
+      detalhe += ' Ligue o robô abaixo para voltar a enviar.';
+    }
   }
 
   box.innerHTML = `<div style="display:flex;gap:11px;align-items:flex-start;
@@ -2644,8 +2733,6 @@ function renderRoboStatus(){
     <div style="flex:1">
       <div style="font-weight:600;margin-bottom:3px">${esc(titulo)}</div>
       <div class="hint" style="margin:0">${detalhe}</div>
-      ${envioTxt ? `<div class="hint" style="margin:5px 0 0;color:var(--txt3)">
-          Último envio: ${esc(envioTxt.replace(/^(\d{4})-(\d{2})-(\d{2}) /, '$3/$2/$1 '))}</div>` : ''}
     </div>
   </div>`;
 }
@@ -2669,7 +2756,8 @@ function fmtDataHora(d){
 function renderConfigAvisos(){
   const box = document.getElementById('cfgAvisos');
   const editando = podeEditar;
-  box.innerHTML = CFG_AVISOS.map(c => {
+
+  const controle = c => {
     const v = valorCfg(c);
     const id = 'cfg_' + c.p.replace(/[^A-Za-z0-9]/g,'_');
     let ctrl;
@@ -2685,18 +2773,40 @@ function renderConfigAvisos(){
     }
     return `<div class="field-row"><label for="${id}">${esc(c.rot)}</label>${ctrl}
       <span class="hint" style="margin:4px 0 0">${esc(c.dica)}</span></div>`;
-  }).join('');
+  };
+
+  /* Um bloco por canal. Misturar tudo numa grade só é o que fazia parecer
+     que existia um envio só. */
+  box.innerHTML = GRUPOS_AVISOS.map(g => `
+    <div style="margin-bottom:20px">
+      <h3 style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;
+                 color:var(--txt2);margin:0 0 2px">${esc(g.tit)}</h3>
+      <p class="hint" style="margin:0 0 12px;max-width:70ch">${esc(g.sub)}</p>
+      <div class="field-grid">${CFG_AVISOS.filter(c => c.g === g.id).map(controle).join('')}</div>
+    </div>`).join('');
 
   renderRoboStatus();
 
-  const hora  = String(Math.round(valorCfg(CFG_AVISOS[0]))).padStart(2,'0');
-  const uteis = !!valorCfg(CFG_AVISOS[1]);
-  const ativo = !!valorCfg(CFG_AVISOS[2]);
-  document.getElementById('cfgResumo').innerHTML = ativo
-    ? `Hoje: resumo diário às <b>${hora}:00</b>, ${uteis ? 'de segunda a sexta' : 'todos os dias'}. `
-      + 'Cada pessoa recebe uma mensagem só, com as tarefas dela.'
-    : '<span style="color:var(--amber)">Envio desligado.</span> As tarefas continuam aparecendo aqui, '
-      + 'mas nenhuma mensagem sai no Telegram.';
+  const uteis  = !!valorCfg('AVISO SO DIAS UTEIS');
+  const geral  = !!valorCfg('TELEGRAM ATIVO');
+  const hR = String(Math.round(valorCfg('RESUMO HORA'))).padStart(2,'0');
+  const hC = String(Math.round(valorCfg('AVISO HORA'))).padStart(2,'0');
+  const quantos = comTelegram(responsaveisDe(FUNCAO_RESUMO)).length;
+
+  document.getElementById('cfgResumo').innerHTML = !geral
+    ? '<span style="color:var(--amber)">Robô desligado.</span> As tarefas continuam aparecendo aqui, '
+      + 'mas nenhuma mensagem sai no Telegram.'
+    : `Hoje, ${uteis ? 'de segunda a sexta' : 'todos os dias'}: `
+      + (valorCfg('RESUMO ATIVO')
+          ? `resumo geral às <b>${hR}:00</b> para ${quantos
+              ? `<b>${quantos}</b> pessoa(s)`
+              : '<span style="color:var(--amber)">ninguém (falta cadastrar)</span>'}`
+          : 'resumo geral desligado')
+      + '; '
+      + (valorCfg('COBRANCA ATIVA')
+          ? `cobrança individual às <b>${hC}:00</b>, uma mensagem por pessoa com as tarefas dela`
+          : 'cobrança individual desligada')
+      + '.';
 }
 
 /** Grava na aba Parametros — cria a linha se o parâmetro ainda não existir. */
@@ -2723,8 +2833,13 @@ async function salvarConfigAvisos(){
   }
 }
 
+/** Cobráveis + a de resumo. Só para o seletor e para os rótulos. */
+function funcoesTodas(){
+  return [...funcoesCobraveis(), { funcao: FUNCAO_RESUMO, rotulo: ROTULO_RESUMO }];
+}
+
 function rotuloFuncao(f){
-  const achou = funcoesCobraveis().find(x => key(x.funcao) === key(f));
+  const achou = funcoesTodas().find(x => key(x.funcao) === key(f));
   return achou ? achou.rotulo : f;
 }
 
@@ -2777,17 +2892,54 @@ function renderResponsaveis(){
       + 'quantos responsáveis você quiser — todos os ativos recebem.'
     : 'Todas as funções têm pelo menos um responsável com Telegram. '
       + 'Uma função pode ter vários — todos os ativos recebem.';
+
+  renderRecebemResumo();
+}
+
+/* Destinatários do resumo diário. Mesma aba Responsaveis, função RESUMO
+   DIARIO — por isso ficam fora da tabela de cobrança acima. */
+function renderRecebemResumo(){
+  const editando = podeEditar;
+  document.getElementById('thResumoDest').innerHTML =
+    ['Quem recebe','Telegram Chat ID','Ativo','Observações']
+    .map(c => `<th>${c}</th>`).join('') + (editando ? '<th></th>' : '');
+
+  const gente = (DB.responsaveis || [])
+    .filter(r => key(r['Funcao']) === FUNCAO_RESUMO && norm(r['Nome']));
+
+  document.querySelector('#tblResumoDest tbody').innerHTML = gente.length
+    ? gente.map(r => {
+        const chat  = norm(r['Telegram Chat ID']);
+        const ativo = key(r['Ativo']) !== 'NAO';
+        return `<tr>
+          <td><b>${esc(norm(r['Nome']))}</b></td>
+          <td>${chat ? esc(chat) : '<span class="badge warn">falta</span>'}</td>
+          <td><span class="badge ${ativo ? 'ok' : 'mute'}">${ativo ? 'SIM' : 'NAO'}</span></td>
+          <td style="color:var(--txt2)">${esc(norm(r['Observacoes']))}</td>
+          ${editando ? `<td><button class="btn icon-btn" title="Editar"
+              onclick="openRespModal(${r._row})">✏️</button></td>` : ''}
+        </tr>`;
+      }).join('')
+    : `<tr><td class="empty" colspan="${editando ? 5 : 4}">Ninguém recebe o resumo diário ainda.</td></tr>`;
+
+  const aptos = comTelegram(responsaveisDe(FUNCAO_RESUMO)).length;
+  document.getElementById('resumoAviso').innerHTML = aptos
+    ? `${aptos} pessoa(s) recebendo. Pode cadastrar mais de uma — todas recebem a mesma mensagem.`
+    : '<span style="color:var(--amber)">Ninguém cadastrado.</span> Enquanto estiver assim o '
+      + 'resumo diário não sai, mesmo com o robô ligado. A cobrança por tarefa continua normal.';
 }
 
 function openRespModal(row, funcaoPre){
   if (!podeEditar) return toast('Sua conta não tem permissão para editar.', false);
   const r = row ? (DB.responsaveis || []).find(x => x._row === row) : null;
   const g = c => r ? norm(r[c]) : '';
-  const funcoes = funcoesCobraveis().map(f => f.funcao);
+  const funcoes = funcoesTodas().map(f => f.funcao);
+  const ehResumo = key(funcaoPre) === FUNCAO_RESUMO || key(g('Funcao')) === FUNCAO_RESUMO;
 
-  document.getElementById('respTitle').textContent =
-    r ? `Responsável por ${rotuloFuncao(g('Funcao'))}`
-      : (funcaoPre ? `Somar responsável em ${rotuloFuncao(funcaoPre)}` : 'Novo responsável');
+  document.getElementById('respTitle').textContent = ehResumo
+    ? (r ? 'Quem recebe o resumo diário' : 'Somar quem recebe o resumo diário')
+    : (r ? `Responsável por ${rotuloFuncao(g('Funcao'))}`
+         : (funcaoPre ? `Somar responsável em ${rotuloFuncao(funcaoPre)}` : 'Novo responsável'));
   document.getElementById('respForm').dataset.row = row || '';
   document.getElementById('respForm').innerHTML = [
     campo('Funcao','select', r ? g('Funcao') : (funcaoPre || ''), funcoes, false, 'frp_'),
@@ -3260,7 +3412,7 @@ function applyEditingUI(){
   badge.className   = (logado && podeEditar) ? 'badge-edit' : 'badge-readonly';
   document.getElementById('authBtn').textContent = logado ? 'Sair' : 'Entrar com Google';
 
-  ['newLoteBtn','sheetBtn','novoTanqueBtn','novoRespBtn','salvarCfgBtn'].forEach(id => {
+  ['newLoteBtn','sheetBtn','novoTanqueBtn','novoRespBtn','novoResumoBtn','salvarCfgBtn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = (logado && podeEditar) ? '' : 'none';
   });
