@@ -2868,8 +2868,11 @@ function renderResponsaveis(){
     return gente.map((r, i) => {
       const chat = norm(r['Telegram Chat ID']);
       const ativo = key(r['Ativo']) !== 'NAO';
+      /* A função aparece em TODAS as linhas. Deixar a célula vazia nas linhas
+         seguintes agrupava bonito, mas lia como se a função tivesse sumido. */
       return `<tr>
-        <td>${i === 0 ? cabeca : ''}</td>
+        <td>${i === 0 ? cabeca
+              : `<span style="color:var(--txt3)">↳ ${esc(f.rotulo)}</span>`}</td>
         <td>${esc(norm(r['Nome']))}</td>
         <td>${chat ? esc(chat) : '<span class="badge warn">falta</span>'}</td>
         <td><span class="badge ${ativo ? 'ok' : 'mute'}">${ativo ? 'SIM' : 'NAO'}</span></td>
