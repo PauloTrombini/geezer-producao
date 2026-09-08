@@ -8,28 +8,23 @@
  * As regras aqui são AS MESMAS da aba "Tarefas" do painel. Se mudar uma,
  * mude a outra — senão o robô cobra uma coisa e a tela mostra outra.
  *
- * COMO INSTALAR
- * 1. Acesse script.google.com → Novo projeto.
- * 2. Renomeie o projeto para: Geezer Cervejaria — Avisos Telegram
- * 3. Cole este arquivo inteiro por cima do Code.gs.
- * 4. Menu Configurações do projeto (engrenagem) → Propriedades do script →
- *    Adicionar propriedade:
- *        Nome:  TELEGRAM_TOKEN
- *        Valor: (o token que o @BotFather te deu)
- *    Guarde o token SÓ aqui. Nunca dentro do código.
- * 5. Volte ao editor, escolha a função `testarAgora` e clique em Executar.
- *    O Google vai pedir autorização — aceite. Isso manda o resumo de hoje
- *    só para você, para conferir o texto.
- * 6. Quando estiver satisfeito, execute `instalarGatilhoDiario` uma única vez.
- *    Ele cria um gatilho DE HORA EM HORA. A cada hora o script confere a aba
- *    Parametros e só envia quando bate com AVISO HORA — assim o horário é
- *    mudado no painel, sem ninguém abrir o Apps Script de novo.
+ * VOCÊ NÃO PRECISA MEXER AQUI. O gatilho se instala e se conserta sozinho:
+ * a cada rodada o script confere se o agendamento ainda existe e o recria se
+ * alguém apagou. Quem manda no robô é o PAINEL, aba Tarefas → Envio no
+ * Telegram:
  *
- * O QUE SE CONFIGURA NO PAINEL (aba Tarefas → Envio no Telegram)
+ *    TELEGRAM ATIVO       liga e desliga o robô
  *    AVISO HORA           hora cheia do envio (0 a 23)
  *    AVISO SO DIAS UTEIS  1 = não manda sábado e domingo
- *    TELEGRAM ATIVO       0 = desliga o envio sem mexer no script
  *    AVISO ETAPA/CUSTO/ROTULO DIAS  janelas de antecedência
+ *
+ * O script devolve o próprio estado para o painel, também na aba Parametros:
+ *    ROBO ULTIMA CHECAGEM  carimbo de cada rodada (o "batimento")
+ *    ROBO ULTIMO ENVIO     quando saiu o último resumo, e quantas mensagens
+ *
+ * A única coisa que mora aqui e não pode morar no painel é o token do bot,
+ * em Configurações do projeto → Propriedades do script → TELEGRAM_TOKEN.
+ * O painel é uma página pública; token em página pública é token roubado.
  */
 
 /* ========================= CONFIGURAÇÃO ========================= */
@@ -41,13 +36,23 @@ var ABA_LOG = 'Avisos_Log';  // criada automaticamente na primeira execução
 /* ========================= PONTOS DE ENTRADA ========================= */
 
 /**
- * Chamado de hora em hora pelo gatilho. Ele mesmo decide se é a hora certa,
- * lendo a planilha — é isso que permite mudar o horário pelo painel.
+ * Chamado de hora em hora pelo gatilho. Faz três coisas, nessa ordem:
+ *   1. garante que o próprio gatilho continua existindo;
+ *   2. avisa o painel que está vivo (batimento na aba Parametros);
+ *   3. decide, lendo a planilha, se agora é a hora de mandar.
+ * É o item 3 que permite mudar horário e liga/desliga pelo painel.
  */
 function enviarAvisosDiarios() {
+  garantirGatilho_();
+
   var param = lerParametros_();
   var agora = new Date();
   var hoje = Utilities.formatDate(agora, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  gravarParametro_('ROBO ULTIMA CHECAGEM',
+    Utilities.formatDate(agora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'));
+
+  if (numero_(param['TELEGRAM ATIVO']) === 0) return;           // desligado no painel
 
   var hora = param['AVISO HORA'] != null ? Math.round(numero_(param['AVISO HORA'])) : HORA_PADRAO;
   if (agora.getHours() !== hora) return;                       // ainda não é a hora
@@ -65,8 +70,11 @@ function enviarAvisosDiarios() {
     return;
   }
 
-  executar_(false, null);
+  var n = executar_(false, null);
   props.setProperty('ULTIMO_ENVIO', hoje);
+  gravarParametro_('ROBO ULTIMO ENVIO',
+    Utilities.formatDate(agora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
+    + ' · ' + n + ' mensagem(ns)');
 }
 
 /** Teste manual: monta tudo e manda só para você, sem incomodar a equipe. */
@@ -82,29 +90,43 @@ function testarAgora() {
 }
 
 /**
- * Execute UMA vez. Cria um gatilho de hora em hora; quem decide a hora do
- * envio é a planilha, então você nunca mais precisa voltar aqui para mudar
- * o horário.
+ * Garante que existe UM (e só um) agendamento de hora em hora. Roda em toda
+ * rodada e também no `ativarRobo`, então o gatilho se conserta sozinho se
+ * alguém apagar. Devolve true se precisou criar.
+ *
+ * Para DESLIGAR o robô não se mexe aqui: é o TELEGRAM ATIVO do painel.
  */
-function instalarGatilhoDiario() {
-  var t = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < t.length; i++) {
-    if (t[i].getHandlerFunction() === 'enviarAvisosDiarios') ScriptApp.deleteTrigger(t[i]);
+function garantirGatilho_() {
+  try {
+    var t = ScriptApp.getProjectTriggers(), achou = 0;
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].getHandlerFunction() !== 'enviarAvisosDiarios') continue;
+      achou++;
+      if (achou > 1) ScriptApp.deleteTrigger(t[i]);   // duplicado: descarta
+    }
+    if (achou) return false;
+    ScriptApp.newTrigger('enviarAvisosDiarios').timeBased().everyHours(1).create();
+    Logger.log('Gatilho de hora em hora (re)criado.');
+    return true;
+  } catch (e) {
+    Logger.log('Não deu para conferir o gatilho: ' + e);
+    return false;
   }
-  ScriptApp.newTrigger('enviarAvisosDiarios').timeBased().everyHours(1).create();
-  var p = lerParametros_();
-  var h = p['AVISO HORA'] != null ? Math.round(numero_(p['AVISO HORA'])) : HORA_PADRAO;
-  Logger.log('Gatilho de hora em hora criado. Hoje o envio está marcado para ' + h + 'h '
-           + '(mude no painel, aba Tarefas → Envio no Telegram).');
 }
 
-/** Remove o agendamento. */
-function removerGatilhoDiario() {
-  var t = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < t.length; i++) {
-    if (t[i].getHandlerFunction() === 'enviarAvisosDiarios') ScriptApp.deleteTrigger(t[i]);
-  }
-  Logger.log('Gatilho removido.');
+/**
+ * Único botão desta tela, e só na primeira vez: autoriza o script e deixa o
+ * robô de pé. Depois disso tudo é feito pelo painel.
+ */
+function ativarRobo() {
+  garantirGatilho_();
+  var agora = new Date();
+  gravarParametro_('ROBO ULTIMA CHECAGEM',
+    Utilities.formatDate(agora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'));
+  var p = lerParametros_();
+  var h = p['AVISO HORA'] != null ? Math.round(numero_(p['AVISO HORA'])) : HORA_PADRAO;
+  Logger.log('Robô de pé. Confere a cada hora; hoje o envio está marcado para ' + h + 'h. '
+           + 'Horário, dias e liga/desliga ficam no painel, aba Tarefas → Envio no Telegram.');
 }
 
 /* ========================= MOTOR ========================= */
@@ -113,7 +135,7 @@ function executar_(teste, chatForcado) {
   var param = lerParametros_();
   if (!teste && numero_(param['TELEGRAM ATIVO']) === 0) {
     Logger.log('TELEGRAM ATIVO = 0 na aba Parametros. Nada enviado.');
-    return;
+    return 0;
   }
 
   var tarefas = montarTarefas_(param);
@@ -148,12 +170,13 @@ function executar_(teste, chatForcado) {
     });
   });
 
-  var log = [];
+  var log = [], enviadas = 0;
   Object.keys(porPessoa).forEach(function (chat) {
     var p = porPessoa[chat];
     p.tarefas.sort(function (a, b) { return a.prazo - b.prazo; });
     var msg = montarMensagem_(p.nome, p.tarefas, teste);
     var r = enviarTelegram_(chat, msg);
+    if (r.ok) enviadas++;
     log.push([new Date(), p.nome, chat, p.tarefas.length, r.ok ? 'ENVIADO' : 'ERRO: ' + r.erro,
               teste ? 'TESTE' : 'DIARIO']);
     Logger.log((r.ok ? 'OK ' : 'FALHA ') + p.nome + ' (' + p.tarefas.length + ' tarefas)');
@@ -167,6 +190,7 @@ function executar_(teste, chatForcado) {
   if (!Object.keys(porPessoa).length) Logger.log('Nenhuma tarefa para enviar hoje.');
 
   gravarLog_(log);
+  return enviadas;
 }
 
 /** Lista de tarefas em aberto — mesma regra da aba Tarefas do painel. */
@@ -306,6 +330,38 @@ function lerParametros_() {
     if (p) out[p] = r['Valor'];
   });
   return out;
+}
+
+/**
+ * Escreve (ou atualiza) uma linha da aba Parametros. É por aqui que o robô
+ * conta ao painel que está vivo — o painel só lê a planilha, nunca o script.
+ */
+function gravarParametro_(nome, valor) {
+  try {
+    var ss = planilha_();
+    var aba = ss.getSheetByName('Parametros');
+    if (!aba) return;
+    var v = aba.getDataRange().getDisplayValues();
+    if (!v.length) return;
+    var cab = v[0], cP = -1, cV = -1;
+    for (var j = 0; j < cab.length; j++) {
+      if (chave_(cab[j]) === 'PARAMETRO') cP = j;
+      if (chave_(cab[j]) === 'VALOR') cV = j;
+    }
+    if (cP < 0 || cV < 0) return;
+    var alvo = chave_(nome);
+    for (var i = 1; i < v.length; i++) {
+      if (chave_(v[i][cP]) === alvo) {
+        aba.getRange(i + 1, cV + 1).setValue(valor);
+        return;
+      }
+    }
+    var linha = new Array(cab.length).fill('');
+    linha[cP] = nome; linha[cV] = valor;
+    aba.appendRow(linha);
+  } catch (e) {
+    Logger.log('Não deu para gravar o parâmetro ' + nome + ': ' + e);
+  }
 }
 
 function lerEtapas_() {

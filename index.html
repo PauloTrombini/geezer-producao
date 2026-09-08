@@ -538,13 +538,14 @@
       <div class="panel-head">
         <div>
           <h2>Envio no Telegram</h2>
-          <p class="hint">O robô roda de hora em hora e só dispara na hora marcada aqui — então dá para
-            mudar o horário sem mexer no script. Vale para o envio automático; o botão Executar do
-            Apps Script continua mandando na hora.</p>
+          <p class="hint">O agendamento é comandado daqui. O robô confere esta tela de hora em hora e
+            só dispara no horário marcado — ninguém precisa abrir o Apps Script para mudar horário,
+            dias ou desligar o envio.</p>
         </div>
         <button class="btn btn-primary" id="salvarCfgBtn" style="display:none;"
                 onclick="salvarConfigAvisos()">Salvar configuração</button>
       </div>
+      <div id="roboStatus"></div>
       <div class="field-grid" id="cfgAvisos"></div>
       <p class="hint" id="cfgResumo" style="margin-top:14px"></p>
     </div>
@@ -2577,6 +2578,94 @@ function valorCfg(c){
   return v == null ? c.pad : v;
 }
 
+/* PARAM guarda número; o batimento do robô é texto, então lê direto da aba. */
+function paramTexto(nome){
+  const r = (DB.parametros || []).find(x => key(x['Parametro']) === key(nome));
+  return r ? norm(r['Valor']) : '';
+}
+
+/** "2026-09-08 14:00" -> Date. Devolve null se vier vazio ou torto. */
+function dataHoraParam(s){
+  const m = norm(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
+}
+
+/** Próximo disparo, respeitando hora, fim de semana e o envio de hoje. */
+function proximoEnvio(hora, soUteis, jaSaiuHoje){
+  const d = new Date();
+  d.setHours(hora, 0, 0, 0);
+  if (d <= new Date() || jaSaiuHoje) d.setDate(d.getDate() + 1);
+  if (soUteis) while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+/* O robô carimba ROBO ULTIMA CHECAGEM a cada rodada. É esse batimento que
+   deixa o painel afirmar que o agendamento está de pé — sem ninguém precisar
+   abrir o Apps Script para conferir se o gatilho existe. */
+function renderRoboStatus(){
+  const box = document.getElementById('roboStatus');
+  if (!box) return;
+  const ativo   = !!valorCfg(CFG_AVISOS[2]);
+  const hora    = Math.round(valorCfg(CFG_AVISOS[0]));
+  const soUteis = !!valorCfg(CFG_AVISOS[1]);
+
+  const check = dataHoraParam(paramTexto('ROBO ULTIMA CHECAGEM'));
+  const envioTxt = paramTexto('ROBO ULTIMO ENVIO');
+  const envio = dataHoraParam(envioTxt);
+  const min = check ? Math.floor((Date.now() - check.getTime()) / 60000) : null;
+
+  let cor, titulo, detalhe;
+  if (!check){
+    cor = 'var(--amber)';
+    titulo = 'Robô ainda não deu sinal';
+    detalhe = 'O agendamento nunca rodou. Assim que ele rodar pela primeira vez, '
+            + 'esta linha passa a mostrar a última checagem sozinha.';
+  } else if (min > 95){
+    cor = 'var(--red)';
+    titulo = 'Robô parado há ' + humanoDesde(min);
+    detalhe = 'Ele deveria dar sinal de hora em hora. Enquanto estiver assim, '
+            + 'nenhuma cobrança sai no Telegram.';
+  } else {
+    cor = ativo ? 'var(--green)' : 'var(--amber)';
+    titulo = ativo ? 'Robô de pé' : 'Robô de pé, mas com o envio desligado';
+    const prox = proximoEnvio(hora, soUteis,
+      envio ? envio.toDateString() === new Date().toDateString() : false);
+    detalhe = 'Última checagem ' + (min <= 1 ? 'agora há pouco' : 'há ' + humanoDesde(min)) + '. '
+            + (ativo
+                ? 'Próximo resumo em <b>' + fmtDataHora(prox) + '</b>.'
+                : 'Ligue o envio abaixo para voltar a cobrar.');
+  }
+
+  box.innerHTML = `<div style="display:flex;gap:11px;align-items:flex-start;
+      background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${cor};
+      border-radius:9px;padding:12px 14px;margin-bottom:18px">
+    <span style="color:${cor};font-size:17px;line-height:1.2">●</span>
+    <div style="flex:1">
+      <div style="font-weight:600;margin-bottom:3px">${esc(titulo)}</div>
+      <div class="hint" style="margin:0">${detalhe}</div>
+      ${envioTxt ? `<div class="hint" style="margin:5px 0 0;color:var(--txt3)">
+          Último envio: ${esc(envioTxt.replace(/^(\d{4})-(\d{2})-(\d{2}) /, '$3/$2/$1 '))}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function humanoDesde(min){
+  if (min < 60) return min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 48) return h + 'h';
+  return Math.floor(h / 24) + ' dias';
+}
+
+function fmtDataHora(d){
+  const p = n => String(n).padStart(2, '0');
+  const hoje = new Date(), amanha = new Date(); amanha.setDate(hoje.getDate() + 1);
+  const dia = d.toDateString() === hoje.toDateString()  ? 'hoje'
+            : d.toDateString() === amanha.toDateString() ? 'amanhã'
+            : p(d.getDate()) + '/' + p(d.getMonth() + 1);
+  return dia + ' às ' + p(d.getHours()) + ':00';
+}
+
 function renderConfigAvisos(){
   const box = document.getElementById('cfgAvisos');
   const editando = podeEditar;
@@ -2597,6 +2686,8 @@ function renderConfigAvisos(){
     return `<div class="field-row"><label for="${id}">${esc(c.rot)}</label>${ctrl}
       <span class="hint" style="margin:4px 0 0">${esc(c.dica)}</span></div>`;
   }).join('');
+
+  renderRoboStatus();
 
   const hora  = String(Math.round(valorCfg(CFG_AVISOS[0]))).padStart(2,'0');
   const uteis = !!valorCfg(CFG_AVISOS[1]);
